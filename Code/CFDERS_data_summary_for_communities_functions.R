@@ -1,0 +1,284 @@
+library_check<- function(libraries) {
+  ## Details
+  # This function will check for and then either load or install any libraries needed to run subsequent functions
+  
+  # Args:
+  # libraries = Vector of required library names
+  
+  # Returns: NA, just downloads/loads libraries into current work space.
+  
+  ## Start function
+  lapply(libraries, FUN = function(x) {
+    if (!require(x, character.only = TRUE)) {
+      install.packages(x, dependencies = TRUE)
+      library(x, character.only = TRUE)
+    }
+  })
+  ## End function
+}
+
+bind_cfders<- function(data.path, out.path){
+  ## Details
+  # This function reads in yearly CFDERS datasets and binds them together. The individual reading and saving is incredible time consuming. So, ideally shouldn't have to do this more than once. After it is done, we can use the full dataset
+  
+  # Args:
+    # data.path = Path to the CFDERS data files
+    # out.path = Path to save mean landed value, mean landed volume and unique dealer summary files
+  
+  # Returns: Data frame with all of the yearly CFDERS datasets. This dataframe is saved as a flat file in out.path directory
+  
+  ## Start function
+  # Install libraries
+  library_check(c("tidyverse"))
+  
+  # Set arguments for debugging -- this will NOT run when you call the function. Though, you can run each line inside the {} and then you will have everything you need to walk through the rest of the function.
+  if(FALSE){
+    data.path = "/Volumes/Shared/Research/COCA-conf/Landings/data"
+    out.path = "/Volumes/Shared/Research/COCA-conf/Landings/data/"
+  }
+  
+  # Read in yearly cfders datasets
+  df<- list.files(path = data.path, pattern = "cfders_", full.names = TRUE) %>% 
+    map_df(~read.csv(.))
+  # Make all columns lower case 
+  colnames(df)<- tolower(colnames(df))
+  
+  # Save it 
+  write_csv(df, paste(out.path, "2011_to_2015_combined_cfders.csv", sep = ""))
+}
+
+cfders_community_name_match<- function(data.path, out.path){
+  ## Details
+  # This function reads in the cfders ports and the communities from vtr and does work to match the names for future processing and alignment of cfders data with species distribution model and vtr community data
+  
+  # Args:
+  # data.path = Path to the CFDERS data file of unique names and to VTR raster data for community names
+  # out.path = Path to save file that has matched names (AND REQUIRES ADDITIONAL PROCESSING!)
+  
+  # Returns: NA
+  
+  ## Start function
+  library_check(c("raster", "tidyverse"))
+  
+  # Read in Footprint data 
+  vtr.dat<- readRDS(paste(data.path, "VTR fishing footprints by community and gear type 2011-2015.rds", sep = ""))
+  
+  # Get
+  comm.names<- vtr.dat$JGS.COMMUNITY
+  #unique(comm.names) # 126 total communities
+  
+  ## Read in CFDERS ports
+  cfders.dat<- read_csv(paste(cfders.path, "port_name_list.csv", sep = "")) %>%
+    dplyr::select(., -X1)
+  #unique(cfders.dat$PORT) # 748 unique port codes
+  #unique(cfders.dat$PORT_NAME) # Only 684 unique port names
+  #unique(cfders.dat$BRAD_PORT_NAME_STATE) # 708 unique brad port names
+  
+  # Preliminary inspection -- what are going to be some known issues? what column of CFDERRS is most like the VTR community names
+  #head(comm.names)
+  #head(cfderrs.dat)
+  
+  # Well, immediate issue is that the VTR communities have multiple "_". Let's split the names by the LAST instance of the "_". This should give us two columns, one for community, one for state. Then we can remove any special characters or spaces from the community column in the VTR data as well as the PORT_NAME column for the cfderrs data. Finally, combining the stripped commuinity column with the second state column for VTR and then matching up to a combined stripped PORT_NAME column and PORT_STATE from the CFDERRS should give us the best chance to match. 
+  # VTR data first
+  comm.names.split<- strsplit(comm.names, "_\\s*(?=[^_]+$)", perl=TRUE)
+  
+  # First item in each list element will have community, second has the state...
+  comm.dat<- data.frame("JGS" = comm.names, "CommunityOnly" = unlist(lapply(comm.names.split, "[", 1)), "StateOnly" = unlist(lapply(comm.names.split, "[", 2)))
+  
+  # Did that make sense?
+  #unique(comm.dat$StateOnly)
+  #unique(comm.dat$CommunityOnly)
+  
+  # Seems good...lets clean up the Community only column to remove all spaces and special characters
+  comm.dat$CommunityOnlyStripped<- str_replace_all(comm.dat$CommunityOnly, "[^[:alnum:]]", "")
+  
+  # Make the community merge column
+  comm.dat$MatchColumn<- paste(comm.dat$CommunityOnlyStripped, comm.dat$StateOnly, sep = "")
+  
+  # Now CFDERS. In Brad's, there is some addition bizarreness as there are many Port's that have Name (County). So, first get rid of anything bizarre in parentheses?
+  cfders.dat$NoParen<- str_replace(cfders.dat$BRAD_PORT_NAME_STATE, " \\(.*\\)", "")
+  # Once more, without space before paren
+  cfders.dat$NoParen<- str_replace(cfders.dat$NoParen, "\\(.*\\)", "")
+  
+  # Looks good, no strip characters
+  cfders.dat$MatchColumn<- str_replace_all(cfders.dat$NoParen, "[^[:alnum:]]", "")
+  
+  ## Merge them together and save the result
+  comm.dat.unique<- comm.dat[!duplicated(comm.dat$JGS),]
+  comm.cfderrs.dat<- comm.dat.unique %>%
+    left_join(., cfders.dat)
+  names.missed<- comm.cfders.dat[is.na(comm.cfders.dat$BRAD_PORT_NAME_STATE),]
+  write_csv(comm.cfders.dat, paste(out.path, "VTR_CFDERS_Comparison.csv", sep = ""))
+  write_csv(names.missed, paste(out.path, "VTR_CFDERS_Missed.csv", sep = ""))
+  
+  ## What is going on with these misses?
+  #names.missed$JGS
+  
+  # Some make a lot of sense -- a bunch of smaller ports combined into one community as in Stonington_Mystic_Pawcatuck_CT. Others though, seem weird. Like Provincetown_MA, Ocean City_MD, Beals Island_ME, Stueben_ME. 
+  
+  # Can we find those in the original CFDERRS data?
+  port.search<- c("PROVINCETOWN", "OCEAN CITY", "BEALS", "STUEBEN")
+  
+  # All of the string detection stuff seems to be behaving oddly. Going back to the basics...
+  for(i in seq_along(port.search)){
+    port.search.use<- port.search[i]
+    temp<- cfders.dat[grepl(port.search.use, cfders.dat$BRAD_PORT_NAME_STATE),]
+    
+    if(i == 1){
+      cfders.searched<- temp
+    } else {
+      cfders.searched<- bind_rows(cfders.searched, temp)
+    }
+  }
+  
+  # Alright, so that helps a little bit. We could manually enter these. For the other ones, those are all going to be combinations of ports, I think?
+  find<- "REEDVILLE"
+  find.df<- data.frame(cfders.dat[grepl(find, cfders.dat$BRAD_PORT_NAME_STATE),])
+  #find.df
+  
+  # To fill these in, I went through the VTR_CFDERS_Comparison file that is generated from the code above. For one's with NAs for Brad's stuff, I then searched the CFDERS data and added them in manually. I tried to cover all combinations of things. For some, this means we now have multiple rows for the CFDERS stuff for one JGS community (for example: Stonington, Mystic, Pawcatuck has two rows for Brad/CFDERS stuff as Stonington and Mystic are unique ports). This was pretty straight forward, with a few exceptions. Like "Prospect" -- there is a Prospect Township and a Prospect Harbor. I only included the Harbor as the Township was island and a long ways from Gouldsboro/Corea and other ports in that JGS community. Finally, I deleted all incidences of (State) or (County). The resulting file is "VTR_CFDERS_Comparison_Edited_NoCounties.csv"
+  
+  # End function
+}
+
+summarize_cfders<- function(data.path, out.path, focal.comms){
+  ## Details
+  # This function summarizes landed value, volume and unique dealer CFDERS data. Summaries are provided for:
+    # Year - Community (sum and n_distinct)
+    # Community across years (mean, sum and n_distinct)
+    # Community - Species across years (mean, sum and n_distinct)
+    # Community - Gear - Species across years (mean, sum and n_distinct) only for the ports listed in focal.ports vector
+  
+  # Args:
+    # data.path = Path to the CFDERS datafile (created by bind_cfders) and file with VTR community names
+    # out.path = Path to save summary file
+    # focal.comms = VTR focal communities to filter full dataset before calculating gear-species summaries
+
+  # Returns: List of tidy datasets, one for each of the summary combinations outlined above. Each of these is also saved individually to the output location specified by out.path
+  
+  ## Start function
+  # Install libraries
+  library_check(c("tidyverse"))
+  
+  # Set arguments for debugging -- this will NOT run when you call the function. Though, you can run each line inside the {} and then you will have everything you need to walk through the rest of the function.
+  if(FALSE){
+    data.path = "/Volumes/Shared/Research/COCA-conf/Landings/data/"
+    out.path = "/Volumes/Shared/Research/COCA-conf/Landings/summaries/"
+    focal.comms<- c("STONINGTON_ME", "PORTLAND_ME", "NEW BEDFORD_MA", "POINT JUDITH_RI")
+  }
+  
+  # Bring in cfders and vtr community data
+  cfders<- read_csv(paste(data.path, "2011_to_2015_combined_cfders.csv", sep = ""))
+  vtr.comm<- read_csv(paste(data.path, "VTR_CFDERS_Comparison_Edited_NoCounties.csv", sep = ""))
+  colnames(vtr.comm)<- tolower(colnames(vtr.comm))
+  
+  df<- cfders %>%
+    left_join(vtr.comm)
+  
+  # Data summaries 
+  # First some house keeping, get rid of NA values, NA port names and County or State port names
+  df.sub<- df %>%
+    drop_na(., spplndlb, sppvalue, brad_port_name_state, port) %>%
+    filter(., !grepl("(COUNTY)|(STATE)", brad_port_name_state))
+  
+  # Now summaries -- every kind of summary that doesn't include community
+  # Empty list to store the results
+  out.list<- vector("list", length = 4)
+  
+  # Year - community first
+  yr.comm<- df.sub %>%
+    group_by(year, jgs) %>%
+    summarize(.,
+              "sppvalue.sum" = sum(sppvalue, na.rm = T),
+              "spplndlb.sum" = sum(spplndlb, na.rm = T),
+              "dealers.distinct" = n_distinct(dealnum)) %>%
+    ungroup() 
+  out.list[[1]]<- yr.comm
+  names(out.list)[1]<- "yr.comm"
+  
+  # Community averages across years and number of distinct dealers
+  comm<- df.sub %>%
+    group_by(jgs) %>%
+    summarize(.,
+              "years" = n_distinct(year),
+              "sppvalue.sum" = sum(sppvalue, na.rm = T),
+              "sppvalue.mean" = mean(sppvalue, na.rm = T),
+              "spplndlb.sum" = sum(spplndlb, na.rm = T),
+              "spplndlb.mean" = mean(spplndlb, na.rm = T),
+              "dealers.distinct" = n_distinct(dealnum)) %>%
+    ungroup() 
+  out.list[[2]]<- comm
+  names(out.list)[2]<- "comm"
+  
+  # Community species across years and number of distinct dealers
+  comm.spp<- df.sub %>%
+    group_by(jgs, spp_common_name) %>%
+    summarize(.,
+              "years" = n_distinct(year),
+              "sppvalue.sum" = sum(sppvalue, na.rm = T),
+              "sppvalue.mean" = mean(sppvalue, na.rm = T),
+              "spplndlb.sum" = sum(spplndlb, na.rm = T),
+              "spplndlb.mean" = mean(spplndlb, na.rm = T),
+              "dealers.distinct" = n_distinct(dealnum)) %>%
+    ungroup()
+  out.list[[3]]<- comm.spp
+  names(out.list)[3]<- "comm.spp"
+  
+  # Community species gear type and number of distinct dealers
+  comm.spp.gear.temp<- df.sub %>%
+    filter(., jgs %in% focal.comms) %>%
+    mutate(., gear.type = case_when(negear_name %in% c('BEAM TRAWL, OTHER/NK SPECIES', 'BEAM TRAWL,FISH',
+                        'OTTER TRAWL, BEAM','OTTER TRAWL, BOTTOM,FISH',
+                        'OTTER TRAWL, BOTTOM,OTHER', 'OTTER TRAWL, BOTTOM,SCALLOP',
+                        'OTTER TRAWL, BOTTOM,SHRIMP','OTTER TRAWL, HADDOCK SEPARATOR',
+                        'OTTER TRAWL, MIDWATER','OTTER TRAWL, RUHLE',
+                        'OTTER TRAWL,BOTTOM,TWIN','PAIR TRAWL, MIDWATER',
+                        'TRAWL,OTTER,BOTTOM PAIRED','TRAWL,OTTER,BOTTOM,FISH',
+                        'TRAWL,OTTER,BOTTOM,OTHER/NK SPECIES',
+                        'TRAWL,OTTER,BOTTOM,SCALLOP','TRAWL,OTTER,BOTTOM,SHRIMP',
+                        'TRAWL,OTTER,MIDWATER', 'TRAWL,OTTER,MIDWATER PAIRED')  ~ 'Trawl',
+                        
+                        negear_name %in% c('PURSE SEINE, OTHER/NK SPECIES','SEINE, PURSE')  ~ 'Purse-Seine',
+                        
+                        negear_name %in% c('POT, CONCH/WHELK',    'POT, CRAB',
+                       'POT, EEL', 'POT, FISH', 'POT, HAG',    'POT, LOBSTER',
+                       'POT, OTHER','POT/TRAP, LOBSTER INSH NK',
+                       'POT/TRAP, LOBSTER OFFSH NK', 'POTS + TRAPS, HAGFISH',
+                       'POTS + TRAPS,EEL', 'POTS + TRAPS,FISH',
+                       'POTS + TRAPS,OTHER/NK SPECIES', 'TRAP') ~ 'Pots / Traps',
+                       
+                       negear_name %in% c('LONGLINE, BOTTOM', 'LONGLINE, PELAGIC') ~ 'Longline',
+                       
+                       negear_name %in% c('GILL NET, ANCHORED-FLOATING, FISH', 'GILL NET, DRIFT,LARGE MESH',
+                       'GILL NET, DRIFT,SMALL MESH','GILL NET, DRIFT-SINK, FISH',
+                       'GILL NET, FIXED OR ANCHORED,SINK, OTHER/NK SPECIES',
+                       'GILL NET, OTHER','GILL NET, RUNAROUND', 'GILL NET, SINK') ~ 'Gillnet',
+                       
+                       negear_name %in% c('DREDGE, CLAM','DREDGE, OCEAN QUAHOG/SURF CLAM',
+                       'DREDGE, OTHER','DREDGE, OTHER/NK SPECIES',
+                       'DREDGE, SCALLOP,SEA','DREDGE, SCALLOP-CHAIN MAT',
+                       'DREDGE, SURF CLAM + OCEAN QUAHO','DREDGE, URCHIN',
+                       'DREDGE,SCALLOP,CHAIN MAT,MOD') ~ 'Dredge'))
+  
+  comm.spp.gear<- comm.spp.gear.temp %>%
+    group_by(jgs, spp_common_name, gear.type) %>% 
+    summarize(.,
+              "years" = n_distinct(year),
+              "sppvalue.sum" = sum(sppvalue, na.rm = T),
+              "sppvalue.mean" = mean(sppvalue, na.rm = T),
+              "spplndlb.sum" = sum(spplndlb, na.rm = T),
+              "spplndlb.mean" = mean(spplndlb, na.rm = T),
+              "dealers.distinct" = n_distinct(dealnum)) %>%
+    ungroup() 
+  out.list[[4]]<- comm.spp.gear
+  names(out.list)[4]<- "comm.spp.gear"
+  
+  # Save each independently and then return the list
+  for(i in seq_along(out.list)){
+    write_csv(data.frame(out.list[[i]]), path = paste(out.path, names(out.list[i]), "summary.csv", sep = ""))
+  }
+  return(out.list)
+  # End function
+} 
+
+
