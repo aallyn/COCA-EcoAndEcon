@@ -281,4 +281,241 @@ summarize_cfders<- function(data.path, out.path, focal.comms){
   # End function
 } 
 
+species_gear_weightedchange<- function(data.path, out.path, focal.comms){
+  ## Details
+  # This function summarizes landed value, volume and unique dealer CFDERS data. Summaries are provided for:
+  
+  # Args:
+  # data.path = Path to the CFDERS datafile (created by bind_cfders) and file with VTR community names
+  # out.path = Path to save summary file
+  # focal.comms = VTR focal communities to filter full dataset before calculating gear-species summaries
+  
+  # Returns: 
+  
 
+  ## Start function
+  if(FALSE){
+    data.path<- "~/GitHub/COCA/Results/"
+    out.path<- "~/GitHub/COCA/Results/"
+    focal.ports<- c("STONINGTON_ME", "PORTLAND_ME", "NEW BEDFORD_MA", "POINT JUDITH_RI")
+  }
+  
+  # Install libraries
+  library_check(c("tidyverse", "ggmap"))
+  
+  # Read in species changes
+  comm.diffs<- read_csv(paste(data.path, "EcoToEconPortData03032019.csv", sep = "")) %>%
+    filter(., Community %in% focal.ports)
+  colnames(comm.diffs)[11]<- "ProjectionValue"
+  
+  # LongLat Data
+  google.api<- "AIzaSyDqGwT79r3odaMl0Hksx9GZhHmqe37KSEQ"
+  register_google(key = google.api)
+  geos.longlats<- geocode(location = unique(comm.diffs$CFDERSPortName), output = "latlon")
+  comm.geo<- data.frame("CFDERSPortName" = unique(comm.diffs$CFDERSPortName), "Long" = geos.longlats$lon, "Lat" = geos.longlats$lat)
+ 
+  # Merge in long lat data
+  comm.diffs<- comm.diffs %>%
+    left_join(., comm.geo)
+  
+  # Fisheries landings data
+  fish.dat<- read_csv("/Volumes/Shared/Research/COCA-conf/Landings/summaries/comm.spp.gearsummary.csv")
+  colnames(fish.dat)<- c("Community", "CFDERSCommonName", "Gear", "Years", "SumValue", "MeanValue", "SumVolume", "MeanVolume", "Dealers")
+  
+  fish.dat.agg<- fish.dat %>%
+    group_by(., Community) %>%
+    summarize(., "TotalValue" = sum(SumValue, na.rm = TRUE),
+              "TotalVolume" = sum(SumVolume, na.rm = TRUE))
+  
+  fish.dat<- fish.dat %>%
+    left_join(., fish.dat.agg) %>%
+    mutate(., "ProportionValue" = SumValue/TotalValue,
+           "ProportionVolume" = SumVolume/TotalVolume)
+  
+  # Adjust gears to match the port.diffs
+  fish.dat$Gear<- ifelse(fish.dat$Gear == "Pots / Traps", "Pot_Trap",
+                         ifelse(fish.dat$Gear == "Purse-Seine", "Purse_Seine",
+                                ifelse(is.na(fish.dat$Gear), "Other", fish.dat$Gear)))
+  
+  # Merge in fisheries landings data
+  comm.diffs<- comm.diffs %>%
+    left_join(., fish.dat)
+  comm.diffs
+  summary(comm.diffs)
+  
+  # Write this out
+  write.csv(comm.diffs, file = paste(out.path, "SpeciesFocalCommunityGearTypeChangesLandings_03032019.csv", sep= ""))
+  
+  # Calculate weights and then weight changes
+  comm.diffs$ProjectionValue[is.infinite(comm.diffs$ProjectionValue)]<- 500
+  comm.diffs<- comm.diffs %>%
+    mutate(., "ChangeWeightedValue" = ProjectionValue*ProportionValue,
+           "ChangeWeightedVolume" = ProjectionValue*ProportionVolume)
+  
+  # Write this out
+  write.csv(comm.diffs, file = paste(out.path, "SpeciesFocalCommunityGearTypeWeightedChangesLandings_03032019.csv", sep= ""))
+  
+  # Port aggregated
+  comm.aggregated.weighted.difference<- comm.diffs %>%
+    dplyr::group_by(Community, Long, Lat, Footprint, ProjectionScenario) %>%
+    dplyr::summarize(., "TotalChangeValue" = sum(ChangeWeightedValue, na.rm = TRUE),
+                     "TotalChangeVolume" = sum(ChangeWeightedVolume, na.rm = TRUE))
+  
+  # Write this out and return it
+  write.csv(comm.aggregated.weighted.difference, file = paste(out.path, "FocalCommunityWeightedChangesLandings_03032019.csv", sep= ""))
+}
+
+community_weightedchange<- function(data.path, out.path){
+  ## Details
+  # This function summarizes landed value, volume and unique dealer CFDERS data. Summaries are provided for:
+  
+  # Args:
+  # data.path = Path to the CFDERS datafile (created by bind_cfders) and file with VTR community names
+  # out.path = Path to save summary file
+  
+  # Returns: 
+  
+  
+  ## Start function
+  if(FALSE){
+    data.path<- "~/GitHub/COCA/Results/"
+    out.path<- "~/GitHub/COCA/Results/"
+  }
+  
+  # Install libraries
+  library_check(c("tidyverse", "ggmap"))
+  
+  # Read in species changes
+  comm.diffs<- read_csv(paste(data.path, "EcoToEconPortData03032019.csv", sep = "")) %>%
+    filter(., Gear == "All")
+  colnames(comm.diffs)[11]<- "ProjectionValue"
+  
+  # LongLat Data
+  google.api<- "AIzaSyDqGwT79r3odaMl0Hksx9GZhHmqe37KSEQ"
+  register_google(key = google.api)
+  geos.longlats<- geocode(location = unique(comm.diffs$CFDERSPortName), output = "latlon")
+  comm.geo<- data.frame("CFDERSPortName" = unique(comm.diffs$CFDERSPortName), "Long" = geos.longlats$lon, "Lat" = geos.longlats$lat)
+  
+  # Merge in long lat data
+  comm.diffs<- comm.diffs %>%
+    left_join(., comm.geo)
+  
+  # Fisheries landings data
+  fish.dat<- read_csv("/Volumes/Shared/Research/COCA-conf/Landings/summaries/comm.sppsummary.csv")
+  colnames(fish.dat)<- c("Community", "CFDERSCommonName", "Years", "SumValue", "MeanValue", "SumVolume", "MeanVolume", "Dealers")
+  
+  fish.dat.agg<- fish.dat %>%
+    group_by(., Community) %>%
+    summarize(., "TotalValue" = sum(SumValue, na.rm = TRUE),
+              "TotalVolume" = sum(SumVolume, na.rm = TRUE))
+  
+  fish.dat<- fish.dat %>%
+    left_join(., fish.dat.agg) %>%
+    mutate(., "ProportionValue" = SumValue/TotalValue,
+           "ProportionVolume" = SumVolume/TotalVolume)
+  
+  # Merge in fisheries landings data
+  comm.diffs<- comm.diffs %>%
+    left_join(., fish.dat)
+  comm.diffs
+  summary(comm.diffs)
+  
+  # Write this out
+  write.csv(comm.diffs, file = paste(out.path, "SpeciesCommunityChangesLandings_03032019.csv", sep= ""))
+  
+  # Calculate weights and then weight changes
+  comm.diffs$ProjectionValue[is.infinite(comm.diffs$ProjectionValue)]<- 500
+  comm.diffs<- comm.diffs %>%
+    mutate(., "ChangeWeightedValue" = ProjectionValue*ProportionValue,
+           "ChangeWeightedVolume" = ProjectionValue*ProportionVolume)
+  
+  # Write this out
+  write.csv(comm.diffs, file = paste(out.path, "SpeciesCommunityWeightedChangesLandings_03032019.csv", sep= ""))
+  
+  # Port aggregated
+  comm.aggregated.weighted.difference<- comm.diffs %>%
+    dplyr::group_by(Community, Long, Lat, Footprint, ProjectionScenario) %>%
+    dplyr::summarize(., "TotalChangeValue" = sum(ChangeWeightedValue, na.rm = TRUE),
+                     "TotalChangeVolume" = sum(ChangeWeightedVolume, na.rm = TRUE))
+  
+  # Write this out and return it
+  write.csv(comm.aggregated.weighted.difference, file = paste(out.path, "CommunityWeightedChangesLandings_03032019.csv", sep= ""))
+}
+
+community_weightedchange_plot<- function(){
+  ## Details
+  # This function summarizes landed value, volume and unique dealer CFDERS data. Summaries are provided for:
+  
+  # Args:
+  # data.path = Path to the CFDERS datafile (created by bind_cfders) and file with VTR community names
+  # out.path = Path to save summary file
+  # focal.comms = VTR focal communities to filter full dataset before calculating gear-species summaries
+  
+  # Returns: 
+  
+  
+  ## Start function
+  if(FALSE){
+    data.path<- "~/GitHub/COCA/Results/"
+    out.path<- "~/GitHub/COCA/Results/"
+  }
+  
+  library_check(c("tidyverse", "raster", "rgeos", "ggplot2", "viridis", "cowplot"))
+  
+  # Load in data
+  dat<- read_csv(paste(data.path, "CommunityWeightedChangesLandings_03032019.csv", sep= "")) %>%
+    filter(., ProjectionScenario == "Future_mean_diff.combo.b" & Footprint == "Regular")
+  
+  # Spatial stuff -- gets us the states and shoreline
+  # Spatial projections
+  proj.wgs84<- CRS("+init=epsg:4326") #WGS84
+  proj.utm<- CRS("+init=epsg:2960") #UTM 19
+  
+  #Bounds
+  xlim.use<- c(-77, -65)
+  ylim.use<- c(35.05, 45.2)
+  states <- c("Maine", "New Hampshire", "Massachusetts", "Vermont", "New York", "Rhode Island", "Connecticut", "Delaware", "New Jersey", "Maryland", "Pennsylvania", "Virginia", "North Carolina", "South Carolina", "Georgia", "Florida", "District of Columbia", "West Virgina")
+  provinces <- c("Ontario", "Québec", "Nova Scotia", "New Brunswick")
+  us <- raster::getData("GADM",country="USA",level=1)
+  us.states <- us[us$NAME_1 %in% states,]
+  canada <- raster::getData("GADM",country="CAN",level=1)
+  ca.provinces <- canada[canada$NAME_1 %in% provinces,]
+  us.states.f<- fortify(us.states, NAME_1)
+  ca.provinces.f<- fortify(ca.provinces, NAME_1)
+  
+  # Alright, plot time
+  plot.out.value<- ggplot() +
+    # Update "fill" and "color" to change map color
+    geom_map(data = us.states.f, map = us.states.f,
+             aes(map_id = id, group = group),
+             fill = "#d9d9d9", color = "gray45", size = 0.15) +
+    geom_map(data = ca.provinces.f, map = ca.provinces.f,
+             aes(map_id = id, group = group),
+             fill = "#d9d9d9", color = "gray45", size = 0.15) +
+    geom_point(data = dat, aes(x = Long, y = Lat, fill = TotalChangeValue), shape = 21, size = 4.5, alpha = 0.65) +
+    # Here you'd make adjustments to the point colors...
+    scale_fill_gradient2(name = "Value", low = "blue", mid = "white", high = "red") +
+    ylim(ylim.use) + ylab("Lat") +
+    scale_x_continuous("Long", breaks = c(-75.0, -70.0, -65.0), labels = c("-75.0", "-70.0", "-65.0"), limits = xlim.use) +
+    coord_fixed(1.3) +
+    theme(panel.background = element_rect(fill = "white", color = "black"), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), strip.background = element_rect(fill="white", color = "black"))
+  
+  plot.out.volume<- ggplot() +
+    # Update "fill" and "color" to change map color
+    geom_map(data = us.states.f, map = us.states.f,
+             aes(map_id = id, group = group),
+             fill = "#d9d9d9", color = "gray45", size = 0.15) +
+    geom_map(data = ca.provinces.f, map = ca.provinces.f,
+             aes(map_id = id, group = group),
+             fill = "#d9d9d9", color = "gray45", size = 0.15) +
+    geom_point(data = dat, aes(x = Long, y = Lat, fill = TotalChangeVolume), shape = 21, size = 4.5, alpha = 0.65) +
+    # Here you'd make adjustments to the point colors...
+    scale_fill_gradient2(name = "Volume", low = "blue", mid = "white", high = "red") +
+    ylim(ylim.use) + ylab("Lat") +
+    scale_x_continuous("Long", breaks = c(-75.0, -70.0, -65.0), labels = c("-75.0", "-70.0", "-65.0"), limits = xlim.use) +
+    coord_fixed(1.3) +
+    theme(panel.background = element_rect(fill = "white", color = "black"), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), strip.background = element_rect(fill="white", color = "black"))
+  
+  plot.out<- plot_grid(plot.out.value, plot.out.volume, nrow = 1, labels = c("Value", "Volume"))
+  ggsave(paste(out.path, "CommunityAggregatedWeightedChanges.jpg", sep = ""), plot.out, width = 11, height = 8, units = "in")
+}
