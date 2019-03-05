@@ -143,15 +143,13 @@ cfders_community_name_match<- function(data.path, out.path){
 
 summarize_cfders<- function(data.path, out.path, focal.comms){
   ## Details
-  # This function summarizes landed value, volume and unique dealer CFDERS data. Summaries are provided for:
-    # Year - Community (sum and n_distinct)
-    # Community across years (mean, sum and n_distinct)
-    # Community - Species across years (mean, sum and n_distinct)
-    # Community - Gear - Species across years (mean, sum and n_distinct) only for the ports listed in focal.ports vector
+  # This function summarizes CFDERS landed value and volume data and dealer data. Summaries are provided for:
+    # Community - Gear - Species: 2011-2015 Total Landed Value/Volume, Mean Annual Landed Value/Volume, number of distinct dealers for focal communities
+    # Community - Species: 2011-2015 Total landed Value, Volume, Mean Annual Landed Value/Volume, number of distinct dealers for all communities
   
   # Args:
     # data.path = Path to the CFDERS datafile (created by bind_cfders) and file with VTR community names
-    # out.path = Path to save summary file
+    # out.path = Path to save summary files
     # focal.comms = VTR focal communities to filter full dataset before calculating gear-species summaries
 
   # Returns: List of tidy datasets, one for each of the summary combinations outlined above. Each of these is also saved individually to the output location specified by out.path
@@ -183,95 +181,109 @@ summarize_cfders<- function(data.path, out.path, focal.comms){
   
   # Now summaries -- every kind of summary that doesn't include community
   # Empty list to store the results
-  out.list<- vector("list", length = 4)
+  out.list<- vector("list", length = 2)
   
-  # Year - community first
-  yr.comm<- df.sub %>%
-    group_by(year, jgs) %>%
-    summarize(.,
-              "sppvalue.sum" = sum(sppvalue, na.rm = T),
-              "spplndlb.sum" = sum(spplndlb, na.rm = T),
-              "dealers.distinct" = n_distinct(dealnum)) %>%
-    ungroup() 
-  out.list[[1]]<- yr.comm
-  names(out.list)[1]<- "yr.comm"
-  
-  # Community averages across years and number of distinct dealers
-  comm<- df.sub %>%
-    group_by(jgs) %>%
-    summarize(.,
-              "years" = n_distinct(year),
-              "sppvalue.sum" = sum(sppvalue, na.rm = T),
-              "sppvalue.mean" = mean(sppvalue, na.rm = T),
-              "spplndlb.sum" = sum(spplndlb, na.rm = T),
-              "spplndlb.mean" = mean(spplndlb, na.rm = T),
-              "dealers.distinct" = n_distinct(dealnum)) %>%
-    ungroup() 
-  out.list[[2]]<- comm
-  names(out.list)[2]<- "comm"
-  
-  # Community species across years and number of distinct dealers
-  comm.spp<- df.sub %>%
-    group_by(jgs, spp_common_name) %>%
-    summarize(.,
-              "years" = n_distinct(year),
-              "sppvalue.sum" = sum(sppvalue, na.rm = T),
-              "sppvalue.mean" = mean(sppvalue, na.rm = T),
-              "spplndlb.sum" = sum(spplndlb, na.rm = T),
-              "spplndlb.mean" = mean(spplndlb, na.rm = T),
-              "dealers.distinct" = n_distinct(dealnum)) %>%
-    ungroup()
-  out.list[[3]]<- comm.spp
-  names(out.list)[3]<- "comm.spp"
-  
-  # Community species gear type and number of distinct dealers
-  comm.spp.gear.temp<- df.sub %>%
+  # Focal communities by gear first
+  focalcomm.spp.gear.temp<- df.sub %>%
     filter(., jgs %in% focal.comms) %>%
     mutate(., gear.type = case_when(negear_name %in% c('BEAM TRAWL, OTHER/NK SPECIES', 'BEAM TRAWL,FISH',
-                        'OTTER TRAWL, BEAM','OTTER TRAWL, BOTTOM,FISH',
-                        'OTTER TRAWL, BOTTOM,OTHER', 'OTTER TRAWL, BOTTOM,SCALLOP',
-                        'OTTER TRAWL, BOTTOM,SHRIMP','OTTER TRAWL, HADDOCK SEPARATOR',
-                        'OTTER TRAWL, MIDWATER','OTTER TRAWL, RUHLE',
-                        'OTTER TRAWL,BOTTOM,TWIN','PAIR TRAWL, MIDWATER',
-                        'TRAWL,OTTER,BOTTOM PAIRED','TRAWL,OTTER,BOTTOM,FISH',
-                        'TRAWL,OTTER,BOTTOM,OTHER/NK SPECIES',
-                        'TRAWL,OTTER,BOTTOM,SCALLOP','TRAWL,OTTER,BOTTOM,SHRIMP',
-                        'TRAWL,OTTER,MIDWATER', 'TRAWL,OTTER,MIDWATER PAIRED')  ~ 'Trawl',
-                        
-                        negear_name %in% c('PURSE SEINE, OTHER/NK SPECIES','SEINE, PURSE')  ~ 'Purse-Seine',
-                        
-                        negear_name %in% c('POT, CONCH/WHELK',    'POT, CRAB',
-                       'POT, EEL', 'POT, FISH', 'POT, HAG',    'POT, LOBSTER',
-                       'POT, OTHER','POT/TRAP, LOBSTER INSH NK',
-                       'POT/TRAP, LOBSTER OFFSH NK', 'POTS + TRAPS, HAGFISH',
-                       'POTS + TRAPS,EEL', 'POTS + TRAPS,FISH',
-                       'POTS + TRAPS,OTHER/NK SPECIES', 'TRAP') ~ 'Pots / Traps',
-                       
-                       negear_name %in% c('LONGLINE, BOTTOM', 'LONGLINE, PELAGIC') ~ 'Longline',
-                       
-                       negear_name %in% c('GILL NET, ANCHORED-FLOATING, FISH', 'GILL NET, DRIFT,LARGE MESH',
-                       'GILL NET, DRIFT,SMALL MESH','GILL NET, DRIFT-SINK, FISH',
-                       'GILL NET, FIXED OR ANCHORED,SINK, OTHER/NK SPECIES',
-                       'GILL NET, OTHER','GILL NET, RUNAROUND', 'GILL NET, SINK') ~ 'Gillnet',
-                       
-                       negear_name %in% c('DREDGE, CLAM','DREDGE, OCEAN QUAHOG/SURF CLAM',
-                       'DREDGE, OTHER','DREDGE, OTHER/NK SPECIES',
-                       'DREDGE, SCALLOP,SEA','DREDGE, SCALLOP-CHAIN MAT',
-                       'DREDGE, SURF CLAM + OCEAN QUAHO','DREDGE, URCHIN',
-                       'DREDGE,SCALLOP,CHAIN MAT,MOD') ~ 'Dredge'))
+                                                       'OTTER TRAWL, BEAM','OTTER TRAWL, BOTTOM,FISH',
+                                                       'OTTER TRAWL, BOTTOM,OTHER', 'OTTER TRAWL, BOTTOM,SCALLOP',
+                                                       'OTTER TRAWL, BOTTOM,SHRIMP','OTTER TRAWL, HADDOCK SEPARATOR',
+                                                       'OTTER TRAWL, MIDWATER','OTTER TRAWL, RUHLE',
+                                                       'OTTER TRAWL,BOTTOM,TWIN','PAIR TRAWL, MIDWATER',
+                                                       'TRAWL,OTTER,BOTTOM PAIRED','TRAWL,OTTER,BOTTOM,FISH',
+                                                       'TRAWL,OTTER,BOTTOM,OTHER/NK SPECIES',
+                                                       'TRAWL,OTTER,BOTTOM,SCALLOP','TRAWL,OTTER,BOTTOM,SHRIMP',
+                                                       'TRAWL,OTTER,MIDWATER', 'TRAWL,OTTER,MIDWATER PAIRED')  ~ 'Trawl',
+                                    
+                                    negear_name %in% c('PURSE SEINE, OTHER/NK SPECIES','SEINE, PURSE')  ~ 'Purse-Seine',
+                                    
+                                    negear_name %in% c('POT, CONCH/WHELK',    'POT, CRAB',
+                                                       'POT, EEL', 'POT, FISH', 'POT, HAG',    'POT, LOBSTER',
+                                                       'POT, OTHER','POT/TRAP, LOBSTER INSH NK',
+                                                       'POT/TRAP, LOBSTER OFFSH NK', 'POTS + TRAPS, HAGFISH',
+                                                       'POTS + TRAPS,EEL', 'POTS + TRAPS,FISH',
+                                                       'POTS + TRAPS,OTHER/NK SPECIES', 'TRAP') ~ 'Pots / Traps',
+                                    
+                                    negear_name %in% c('LONGLINE, BOTTOM', 'LONGLINE, PELAGIC') ~ 'Longline',
+                                    
+                                    negear_name %in% c('GILL NET, ANCHORED-FLOATING, FISH', 'GILL NET, DRIFT,LARGE MESH',
+                                                       'GILL NET, DRIFT,SMALL MESH','GILL NET, DRIFT-SINK, FISH',
+                                                       'GILL NET, FIXED OR ANCHORED,SINK, OTHER/NK SPECIES',
+                                                       'GILL NET, OTHER','GILL NET, RUNAROUND', 'GILL NET, SINK') ~ 'Gillnet',
+                                    
+                                    negear_name %in% c('DREDGE, CLAM','DREDGE, OCEAN QUAHOG/SURF CLAM',
+                                                       'DREDGE, OTHER','DREDGE, OTHER/NK SPECIES',
+                                                       'DREDGE, SCALLOP,SEA','DREDGE, SCALLOP-CHAIN MAT',
+                                                       'DREDGE, SURF CLAM + OCEAN QUAHO','DREDGE, URCHIN',
+                                                       'DREDGE,SCALLOP,CHAIN MAT,MOD') ~ 'Dredge'))
   
-  comm.spp.gear<- comm.spp.gear.temp %>%
-    group_by(jgs, spp_common_name, gear.type) %>% 
+  # First get yearly totals of landed value and volume
+  yr.focalcomm.spp.gear<- focalcomm.spp.gear.temp %>%
+    group_by(year, jgs, spp_common_name, gear.type) %>% 
     summarize(.,
-              "years" = n_distinct(year),
-              "sppvalue.sum" = sum(sppvalue, na.rm = T),
-              "sppvalue.mean" = mean(sppvalue, na.rm = T),
-              "spplndlb.sum" = sum(spplndlb, na.rm = T),
-              "spplndlb.mean" = mean(spplndlb, na.rm = T),
-              "dealers.distinct" = n_distinct(dealnum)) %>%
+              "sppvalue.sum" = sum(sppvalue, na.rm = TRUE),
+              "spplndlb.sum" = sum(spplndlb, na.rm = TRUE)) %>%
+    ungroup()
+  
+  # Now, get sum across years and average annual landed value and volume
+  focalcomm.spp.gear<- yr.focalcomm.spp.gear %>%
+    group_by(jgs, spp_common_name, gear.type) %>%
+    summarize(., 
+              "Totalsppvalue" = sum(sppvalue.sum, na.rm = TRUE),
+              "Totalspplndlb" = sum(spplndlb.sum, na.rm = TRUE),
+              "Meansppvalue" = mean(sppvalue.sum, na.rm = TRUE),
+              "Meanspplndlb" = mean(spplndlb.sum, na.rm = TRUE)) %>%
+    ungroup()
+  
+  # Also want distinct dealers across years
+  focalcomm.dealers<- focalcomm.spp.gear.temp %>%
+    group_by(jgs, spp_common_name, gear.type) %>%
+    summarize(., 
+              "DistinctDealers" = n_distinct(dealnum)) %>%
     ungroup() 
-  out.list[[4]]<- comm.spp.gear
-  names(out.list)[4]<- "comm.spp.gear"
+  
+  # Join dealers with focalcomm.spp.gear and save the file
+  focalcomm.spp.gear<- focalcomm.spp.gear %>%
+    left_join(., focalcomm.dealers)
+  
+  out.list[[1]]<- focalcomm.spp.gear
+  names(out.list)[1]<- "FocalComm.Spp.Gear"
+
+  # Next, all communities by species (no gear) 
+  # First get yearly totals of landed value and volume
+  yr.comm.spp<- df.sub %>%
+    group_by(year, jgs, spp_common_name) %>% 
+    summarize(.,
+              "sppvalue.sum" = sum(sppvalue, na.rm = TRUE),
+              "spplndlb.sum" = sum(spplndlb, na.rm = TRUE)) %>%
+    ungroup()
+  
+  # Now, get sum across years and average annual landed value and volume
+  comm.spp<- yr.comm.spp %>%
+    group_by(jgs, spp_common_name) %>%
+    summarize(., 
+              "Totalsppvalue" = sum(sppvalue.sum, na.rm = TRUE),
+              "Totalspplndlb" = sum(spplndlb.sum, na.rm = TRUE),
+              "Meansppvalue" = mean(sppvalue.sum, na.rm = TRUE),
+              "Meanspplndlb" = mean(spplndlb.sum, na.rm = TRUE)) %>%
+    ungroup()
+  
+  # Also want distinct dealers across years
+  comm.dealers<- df.sub %>%
+    group_by(jgs, spp_common_name) %>%
+    summarize(., 
+              "DistinctDealers" = n_distinct(dealnum)) %>%
+    ungroup() 
+  
+  # Join dealers with focalcomm.spp.gear and save the file
+  comm.spp<- comm.spp %>%
+    left_join(., comm.dealers)
+  
+  out.list[[2]]<- comm.spp
+  names(out.list)[2]<- "Comm.Spp"
+  
   
   # Save each independently and then return the list
   for(i in seq_along(out.list)){
@@ -281,188 +293,179 @@ summarize_cfders<- function(data.path, out.path, focal.comms){
   # End function
 } 
 
-species_gear_weightedchange<- function(data.path, out.path, focal.comms){
+sdm_fisheries_weightedchange<- function(cfders.path, sdm.path, out.path, focal.comms){
   ## Details
-  # This function summarizes landed value, volume and unique dealer CFDERS data. Summaries are provided for:
+  # This function uses the CFDERS landed value and volume focal port summaries calculated in the "summarize_cfders" function as weights that are applied to species projected changes in relative biomass. 
   
   # Args:
-  # data.path = Path to the CFDERS datafile (created by bind_cfders) and file with VTR community names
-  # out.path = Path to save summary file
-  # focal.comms = VTR focal communities to filter full dataset before calculating gear-species summaries
+  # data.path = Path to the CFDERS "FocalComm.Spp.Gear" summary file or "Comm.Spp" summary file
+  # sdm.path = Path to the SDM "EcoToEconPortData03032019.csv" file
+  # out.path = Path to save new file that adds landed value and volume importance weights to the SDM EcoToEcon results
+  # focal.comms = VTR focal communities to filter full dataset before calculating gear-species summaries. If null, then the function works with the community-species summaries (no gear)
   
   # Returns: 
   
 
   ## Start function
+  # Install libraries
+  library_check(c("tidyverse", "ggmap"))
+  
+  # Debugging
   if(FALSE){
-    data.path<- "~/GitHub/COCA/Results/"
-    out.path<- "~/GitHub/COCA/Results/"
+    cfders.path<-  "/Volumes/Shared/Research/COCA-conf/Landings/summaries/"
+    sdm.path<- "~/GitHub/COCA/Results/"
+    out.path<- "/Volumes/Shared/Research/COCA-conf/Landings/summaries/"
     focal.ports<- c("STONINGTON_ME", "PORTLAND_ME", "NEW BEDFORD_MA", "POINT JUDITH_RI")
+    focal.ports<- NULL
   }
   
-  # Install libraries
-  library_check(c("tidyverse", "ggmap"))
+  if(!is.null(focal.ports)){
+    # Read in species changes
+    comm.diffs<- read_csv(paste(sdm.path, "EcoToEconPortData03032019.csv", sep = "")) %>%
+      filter(., Community %in% focal.ports)
+    colnames(comm.diffs)[11]<- "ProjectionValue"
+    
+    # LongLat Data
+    google.api<- "AIzaSyDqGwT79r3odaMl0Hksx9GZhHmqe37KSEQ"
+    register_google(key = google.api)
+    geos.longlats<- geocode(location = unique(comm.diffs$CFDERSPortName), output = "latlon")
+    comm.geo<- data.frame("CFDERSPortName" = unique(comm.diffs$CFDERSPortName), "Long" = geos.longlats$lon, "Lat" = geos.longlats$lat)
+    
+    # Merge in long lat data
+    comm.diffs<- comm.diffs %>%
+      left_join(., comm.geo)
+    
+    # Fisheries landings data
+    fish.dat<- read_csv(paste(cfders.path, "FocalComm.Spp.Gearsummary.csv", sep = ""))
+    colnames(fish.dat)<- c("Community", "CFDERSCommonName", "Gear", "TotalValue", "TotalVolume", "MeanValue", "MeanVolume", "DistinctDealers")
+    
+    # Now, get total community value and volume
+    fish.dat.agg<- fish.dat %>%
+      group_by(., Community) %>%
+      summarize(., "CommTotalValue" = sum(TotalValue, na.rm = TRUE),
+                "CommTotalVolume" = sum(TotalVolume, na.rm = TRUE))
+    
+    # Join community totals to community-species-gear dataset and then calculate proportion
+    fish.dat<- fish.dat %>%
+      left_join(., fish.dat.agg) %>%
+      mutate(., "ProportionValue" = TotalValue/CommTotalValue,
+             "ProportionVolume" = TotalVolume/CommTotalVolume)
+    
+    # Adjust gears to match the port.diffs
+    fish.dat$Gear<- ifelse(fish.dat$Gear == "Pots / Traps", "Pot_Trap",
+                           ifelse(fish.dat$Gear == "Purse-Seine", "Purse_Seine",
+                                  ifelse(is.na(fish.dat$Gear), "Other", fish.dat$Gear)))
+    
+    # Merge in fisheries landings data
+    comm.diffs<- comm.diffs %>%
+      left_join(., fish.dat)
+    comm.diffs
+    summary(comm.diffs)
+    
+    # Write this out
+    write.csv(comm.diffs, file = paste(out.path, "SpeciesFocalCommunityGearTypeChangesLandings_03032019.csv", sep= ""))
+    
+    # Calculate weights and then weight changes
+    comm.diffs$ProjectionValue[is.infinite(comm.diffs$ProjectionValue)]<- 500
+    comm.diffs<- comm.diffs %>%
+      mutate(., "ChangeWeightedValue" = ProjectionValue*ProportionValue,
+             "ChangeWeightedVolume" = ProjectionValue*ProportionVolume)
+    
+    # Write this out
+    write.csv(comm.diffs, file = paste(out.path, "SpeciesFocalCommunityGearTypeWeightedChangesLandings_03032019.csv", sep= ""))
+    
+    # Port aggregated
+    comm.aggregated.weighted.difference<- comm.diffs %>%
+      dplyr::group_by(Community, Long, Lat, Footprint, ProjectionScenario) %>%
+      dplyr::summarize(., "TotalChangeValue" = sum(ChangeWeightedValue, na.rm = TRUE),
+                       "TotalChangeVolume" = sum(ChangeWeightedVolume, na.rm = TRUE))
+    
+    # Write this out and return it
+    write.csv(comm.aggregated.weighted.difference, file = paste(out.path, "FocalCommunityWeightedChangesLandings_03032019.csv", sep= ""))
+  } else {
+    # No focal communities, so summaries only at ALL gear levels
+    # Read in species changes
+    comm.diffs<- read_csv(paste(sdm.path, "EcoToEconPortData03032019.csv", sep = "")) %>%
+      filter(., Gear == "All")
+    colnames(comm.diffs)[11]<- "ProjectionValue"
+    
+    # LongLat Data
+    google.api<- "AIzaSyDqGwT79r3odaMl0Hksx9GZhHmqe37KSEQ"
+    register_google(key = google.api)
+    geos.longlats<- geocode(location = unique(comm.diffs$CFDERSPortName), output = "latlon")
+    comm.geo<- data.frame("CFDERSPortName" = unique(comm.diffs$CFDERSPortName), "Long" = geos.longlats$lon, "Lat" = geos.longlats$lat)
+    
+    # Merge in long lat data
+    comm.diffs<- comm.diffs %>%
+      left_join(., comm.geo)
+    
+    # Fisheries landings data
+    fish.dat<- read_csv(paste(cfders.path, "Comm.Sppsummary.csv", sep = ""))
+    colnames(fish.dat)<- c("Community", "CFDERSCommonName", "TotalValue", "TotalVolume", "MeanValue", "MeanVolume", "DistinctDealers")
+    
+    # Now, get total community value and volume
+    fish.dat.agg<- fish.dat %>%
+      group_by(., Community) %>%
+      summarize(., "CommTotalValue" = sum(TotalValue, na.rm = TRUE),
+                "CommTotalVolume" = sum(TotalVolume, na.rm = TRUE))
+    
+    # Join community totals to community-species-gear dataset and then calculate proportion
+    fish.dat<- fish.dat %>%
+      left_join(., fish.dat.agg) %>%
+      mutate(., "ProportionValue" = TotalValue/CommTotalValue,
+             "ProportionVolume" = TotalVolume/CommTotalVolume)
+    
+    # Merge in fisheries landings data
+    comm.diffs<- comm.diffs %>%
+      left_join(., fish.dat)
+    comm.diffs
+    summary(comm.diffs)
+    
+    # Write this out
+    write.csv(comm.diffs, file = paste(out.path, "SpeciesCommunityChangesLandings_03032019.csv", sep= ""))
+    
+    # Calculate weights and then weight changes
+    comm.diffs$ProjectionValue[is.infinite(comm.diffs$ProjectionValue)]<- 500
+    comm.diffs<- comm.diffs %>%
+      mutate(., "ChangeWeightedValue" = ProjectionValue*ProportionValue,
+             "ChangeWeightedVolume" = ProjectionValue*ProportionVolume)
+    
+    # Write this out
+    write.csv(comm.diffs, file = paste(out.path, "SpeciesCommunityWeightedChangesLandings_03032019.csv", sep= ""))
+    
+    # Port aggregated
+    comm.aggregated.weighted.difference<- comm.diffs %>%
+      dplyr::group_by(Community, Long, Lat, Footprint, ProjectionScenario) %>%
+      dplyr::summarize(., "TotalChangeValue" = sum(ChangeWeightedValue, na.rm = TRUE),
+                       "TotalChangeVolume" = sum(ChangeWeightedVolume, na.rm = TRUE))
+    
+    # Write this out and return it
+    write.csv(comm.aggregated.weighted.difference, file = paste(out.path, "CommunityWeightedChangesLandings_03032019.csv", sep= ""))
+  }
+  # End function
+}
+
+community_weightedchange_plot<- function(data.path, ){
+  # This function plots a shelfwide map of the total projected SDM changes, weighted by landed value and volume importance, calculated in the sdm_fisheries_weightedchange function. 
   
-  # Read in species changes
-  comm.diffs<- read_csv(paste(data.path, "EcoToEconPortData03032019.csv", sep = "")) %>%
-    filter(., Community %in% focal.ports)
-  colnames(comm.diffs)[11]<- "ProjectionValue"
-  
-  # LongLat Data
-  google.api<- "AIzaSyDqGwT79r3odaMl0Hksx9GZhHmqe37KSEQ"
-  register_google(key = google.api)
-  geos.longlats<- geocode(location = unique(comm.diffs$CFDERSPortName), output = "latlon")
-  comm.geo<- data.frame("CFDERSPortName" = unique(comm.diffs$CFDERSPortName), "Long" = geos.longlats$lon, "Lat" = geos.longlats$lat)
+  # Args:
+  # data.path = Path to the file that has community - total projected SDM weighted changes "CommunityWeightedChangesLandings_03032019.csv"
+  # out.path = Path to save the map
  
-  # Merge in long lat data
-  comm.diffs<- comm.diffs %>%
-    left_join(., comm.geo)
-  
-  # Fisheries landings data
-  fish.dat<- read_csv("/Volumes/Shared/Research/COCA-conf/Landings/summaries/comm.spp.gearsummary.csv")
-  colnames(fish.dat)<- c("Community", "CFDERSCommonName", "Gear", "Years", "SumValue", "MeanValue", "SumVolume", "MeanVolume", "Dealers")
-  
-  fish.dat.agg<- fish.dat %>%
-    group_by(., Community) %>%
-    summarize(., "TotalValue" = sum(SumValue, na.rm = TRUE),
-              "TotalVolume" = sum(SumVolume, na.rm = TRUE))
-  
-  fish.dat<- fish.dat %>%
-    left_join(., fish.dat.agg) %>%
-    mutate(., "ProportionValue" = SumValue/TotalValue,
-           "ProportionVolume" = SumVolume/TotalVolume)
-  
-  # Adjust gears to match the port.diffs
-  fish.dat$Gear<- ifelse(fish.dat$Gear == "Pots / Traps", "Pot_Trap",
-                         ifelse(fish.dat$Gear == "Purse-Seine", "Purse_Seine",
-                                ifelse(is.na(fish.dat$Gear), "Other", fish.dat$Gear)))
-  
-  # Merge in fisheries landings data
-  comm.diffs<- comm.diffs %>%
-    left_join(., fish.dat)
-  comm.diffs
-  summary(comm.diffs)
-  
-  # Write this out
-  write.csv(comm.diffs, file = paste(out.path, "SpeciesFocalCommunityGearTypeChangesLandings_03032019.csv", sep= ""))
-  
-  # Calculate weights and then weight changes
-  comm.diffs$ProjectionValue[is.infinite(comm.diffs$ProjectionValue)]<- 500
-  comm.diffs<- comm.diffs %>%
-    mutate(., "ChangeWeightedValue" = ProjectionValue*ProportionValue,
-           "ChangeWeightedVolume" = ProjectionValue*ProportionVolume)
-  
-  # Write this out
-  write.csv(comm.diffs, file = paste(out.path, "SpeciesFocalCommunityGearTypeWeightedChangesLandings_03032019.csv", sep= ""))
-  
-  # Port aggregated
-  comm.aggregated.weighted.difference<- comm.diffs %>%
-    dplyr::group_by(Community, Long, Lat, Footprint, ProjectionScenario) %>%
-    dplyr::summarize(., "TotalChangeValue" = sum(ChangeWeightedValue, na.rm = TRUE),
-                     "TotalChangeVolume" = sum(ChangeWeightedVolume, na.rm = TRUE))
-  
-  # Write this out and return it
-  write.csv(comm.aggregated.weighted.difference, file = paste(out.path, "FocalCommunityWeightedChangesLandings_03032019.csv", sep= ""))
-}
-
-community_weightedchange<- function(data.path, out.path){
-  ## Details
-  # This function summarizes landed value, volume and unique dealer CFDERS data. Summaries are provided for:
-  
-  # Args:
-  # data.path = Path to the CFDERS datafile (created by bind_cfders) and file with VTR community names
-  # out.path = Path to save summary file
-  
   # Returns: 
   
   
   ## Start function
-  if(FALSE){
-    data.path<- "~/GitHub/COCA/Results/"
-    out.path<- "~/GitHub/COCA/Results/"
-  }
-  
-  # Install libraries
-  library_check(c("tidyverse", "ggmap"))
-  
-  # Read in species changes
-  comm.diffs<- read_csv(paste(data.path, "EcoToEconPortData03032019.csv", sep = "")) %>%
-    filter(., Gear == "All")
-  colnames(comm.diffs)[11]<- "ProjectionValue"
-  
-  # LongLat Data
-  google.api<- "AIzaSyDqGwT79r3odaMl0Hksx9GZhHmqe37KSEQ"
-  register_google(key = google.api)
-  geos.longlats<- geocode(location = unique(comm.diffs$CFDERSPortName), output = "latlon")
-  comm.geo<- data.frame("CFDERSPortName" = unique(comm.diffs$CFDERSPortName), "Long" = geos.longlats$lon, "Lat" = geos.longlats$lat)
-  
-  # Merge in long lat data
-  comm.diffs<- comm.diffs %>%
-    left_join(., comm.geo)
-  
-  # Fisheries landings data
-  fish.dat<- read_csv("/Volumes/Shared/Research/COCA-conf/Landings/summaries/comm.sppsummary.csv")
-  colnames(fish.dat)<- c("Community", "CFDERSCommonName", "Years", "SumValue", "MeanValue", "SumVolume", "MeanVolume", "Dealers")
-  
-  fish.dat.agg<- fish.dat %>%
-    group_by(., Community) %>%
-    summarize(., "TotalValue" = sum(SumValue, na.rm = TRUE),
-              "TotalVolume" = sum(SumVolume, na.rm = TRUE))
-  
-  fish.dat<- fish.dat %>%
-    left_join(., fish.dat.agg) %>%
-    mutate(., "ProportionValue" = SumValue/TotalValue,
-           "ProportionVolume" = SumVolume/TotalVolume)
-  
-  # Merge in fisheries landings data
-  comm.diffs<- comm.diffs %>%
-    left_join(., fish.dat)
-  comm.diffs
-  summary(comm.diffs)
-  
-  # Write this out
-  write.csv(comm.diffs, file = paste(out.path, "SpeciesCommunityChangesLandings_03032019.csv", sep= ""))
-  
-  # Calculate weights and then weight changes
-  comm.diffs$ProjectionValue[is.infinite(comm.diffs$ProjectionValue)]<- 500
-  comm.diffs<- comm.diffs %>%
-    mutate(., "ChangeWeightedValue" = ProjectionValue*ProportionValue,
-           "ChangeWeightedVolume" = ProjectionValue*ProportionVolume)
-  
-  # Write this out
-  write.csv(comm.diffs, file = paste(out.path, "SpeciesCommunityWeightedChangesLandings_03032019.csv", sep= ""))
-  
-  # Port aggregated
-  comm.aggregated.weighted.difference<- comm.diffs %>%
-    dplyr::group_by(Community, Long, Lat, Footprint, ProjectionScenario) %>%
-    dplyr::summarize(., "TotalChangeValue" = sum(ChangeWeightedValue, na.rm = TRUE),
-                     "TotalChangeVolume" = sum(ChangeWeightedVolume, na.rm = TRUE))
-  
-  # Write this out and return it
-  write.csv(comm.aggregated.weighted.difference, file = paste(out.path, "CommunityWeightedChangesLandings_03032019.csv", sep= ""))
-}
-
-community_weightedchange_plot<- function(){
-  ## Details
-  # This function summarizes landed value, volume and unique dealer CFDERS data. Summaries are provided for:
-  
-  # Args:
-  # data.path = Path to the CFDERS datafile (created by bind_cfders) and file with VTR community names
-  # out.path = Path to save summary file
-  # focal.comms = VTR focal communities to filter full dataset before calculating gear-species summaries
-  
-  # Returns: 
-  
-  
-  ## Start function
-  if(FALSE){
-    data.path<- "~/GitHub/COCA/Results/"
-    out.path<- "~/GitHub/COCA/Results/"
-  }
-  
+  # Libraries
   library_check(c("tidyverse", "raster", "rgeos", "ggplot2", "viridis", "cowplot"))
   
-  # Load in data
+  # Debugging
+  if(FALSE){
+    data.path<- "/Volumes/Shared/Research/COCA-conf/Landings/summaries/"
+    out.path<- "/Volumes/Shared/Research/COCA-conf/Landings/summaries/"
+  }
+  
+  # Load in data, only need to look at results from climate ensemble mean and regular footprint
   dat<- read_csv(paste(data.path, "CommunityWeightedChangesLandings_03032019.csv", sep= "")) %>%
     filter(., ProjectionScenario == "Future_mean_diff.combo.b" & Footprint == "Regular")
   
