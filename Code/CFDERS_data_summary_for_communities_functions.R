@@ -181,7 +181,7 @@ cfders_community_longlat<- function(data.path = ref.tables.path, google.api, out
   
 }
 
-summarize_cfders<- function(landings.path = landings.path, ref.tables.path = ref.tables.path, out.path = proc.summ.path, focal.comms = c("STONINGTON_ME", "PORTLAND_ME", "NEW BEFORD_MA", "POINT JUDITH_RI")){
+summarize_cfders<- function(landings.path = landings.path, ref.tables.path = ref.tables.path, out.path = proc.summ.path, focal.comms = c("STONINGTON_ME", "PORTLAND_ME", "NEW BEDFORD_MA", "POINT JUDITH_RI")){
   ## Details
   # This function summarizes CFDERS landed value and volume data and dealer data. Summaries are provided for:
     # Community - Gear - Species: 2011-2015 Total Landed Value/Volume, Mean Annual Landed Value/Volume, number of distinct dealers for focal communities
@@ -208,7 +208,19 @@ summarize_cfders<- function(landings.path = landings.path, ref.tables.path = ref
   }
   
   # Bring in cfders and vtr community data
-  cfders<- read_csv(paste(landings.path, "2011_to_2015_combined_cfders.csv", sep = ""))
+  cfders<- read_csv(paste(landings.path, "2011_to_2015_combined_cfders.csv", sep = ""),
+                    col_types = cols(cf_license = col_character(),
+                                     state_dnum = col_character(),
+                                     dealer_rpt_id = col_integer(),
+                                     landing_seq = col_integer(),
+                                     doe = col_character(),
+                                     entry_date = col_character(),
+                                     landing_date_safis = col_character(), 
+                                     doc = col_character(),
+                                     vtrserno = col_character(),
+                                     docid = col_character(),
+                                     area = col_character(),
+                                     harvest_area = col_integer()))
   cfders.orig<- cfders
   vtr.comm<- read_csv(paste(ref.tables.path, "VTR_CFDERS_Comparison_Edited_NoCounties_LongLat.csv", sep = ""))
   colnames(vtr.comm)<- tolower(colnames(vtr.comm))
@@ -369,7 +381,9 @@ summarize_gar<- function(landings.path = landings.path, ref.tables.path = ref.ta
 
   
   # Bring in GAR data 
-  gar.df<- read_csv(paste(landings.path, "Mills_1982-2015 GAR Landings combined sheets.csv", sep = ""))
+  gar.df<- read_csv(paste(landings.path, "Mills_1982-2015 GAR Landings combined sheets.csv", sep = ""),
+                    col_types = cols(NHULL = col_integer(),
+                                     NDLR = col_integer()))
   
   # Subset years
   keep.years<- c(2011, 2012, 2013, 2014, 2015)
@@ -422,7 +436,7 @@ sdm_landings_merged<- function(sdm.path = sdm.path, landings.file, focal.comms =
   # Set arguments for debugging -- this will NOT run when you call the function. Though, you can run each line inside the {} and then you will have everything you need to walk through the rest of the function.
   if(FALSE){
     sdm.path<- "/Volumes/Shared/Research/COCA-conf/SDM and CFDERS Integration/Data/SDM Projections/"
-    landings.file<- "/Volumes/Shared/Research/COCA-conf/SDM and CFDERS Integration/Processed Summaries/GARsummary.csv"
+    landings.file<- "/Volumes/Shared/Research/COCA-conf/SDM and CFDERS Integration/Processed Summaries/FocalComm.Spp.Gearsummary.csv"
     focal.comms<- c("STONINGTON_ME", "PORTLAND_ME", "NEW BEDFORD_MA", "POINT JUDITH_RI")
     out.path<- "/Volumes/Shared/Research/COCA-conf/SDM and CFDERS Integration/Processed Summaries/"
   }
@@ -773,7 +787,7 @@ community_weighted_changes<- function(sdm.landings.file, projection.scenario = c
   
   # Set arguments for debugging -- this will NOT run when you call the function. Though, you can run each line inside the {} and then you will have everything you need to walk through the rest of the function.
   if(FALSE){
-    sdm.landings.file<- "/Volumes/Shared/Research/COCA-conf/SDM and CFDERS Integration/Processed Summaries/SpeciesCommunityCFDERSWeightedChanges.csv"
+    sdm.landings.file<- "/Volumes/Shared/Research/COCA-conf/SDM and CFDERS Integration/Processed Summaries/SpeciesFocalCommunityGearTypeCFDERSWeightedChanges.csv"
     projection.scenario<- "Raw"
     out.path<- "/Volumes/Shared/Research/COCA-conf/SDM and CFDERS Integration/Processed Summaries/"
     plot.path<- "/Volumes/Shared/Research/COCA-conf/SDM and CFDERS Integration/Processed Summaries/"
@@ -808,7 +822,7 @@ community_weighted_changes<- function(sdm.landings.file, projection.scenario = c
     sdm.land.dat$ProjectionScenario<- factor(sdm.land.dat$ProjectionScenario, levels = scenarios.levels)
     
     # Save the file
-    write_csv(sdm.land.dat, paste(out.path, "FocalCommunityGearAggregatedCFDERSWeightedChanges.csv"))
+    write_csv(sdm.land.dat, paste(out.path, "FocalCommunityGearAggregatedCFDERSWeightedChanges.csv", sep = ""))
   }
   
   # Communities with CFDERS landings data
@@ -825,7 +839,7 @@ community_weighted_changes<- function(sdm.landings.file, projection.scenario = c
     sdm.land.dat$ProjectionScenario<- factor(sdm.land.dat$ProjectionScenario, levels = scenarios.levels)
     
     # Save the file
-    write_csv(sdm.land.dat, paste(out.path, "CommunityAggregatedCFDERSWeightedChanges.csv"))
+    write_csv(sdm.land.dat, paste(out.path, "CommunityAggregatedCFDERSWeightedChanges.csv", sep = ""))
   }
   
   # Communities with GAR data
@@ -865,7 +879,7 @@ community_weighted_changes<- function(sdm.landings.file, projection.scenario = c
     #Bounds
     xlim.use<- c(-77, -65)
     ylim.use<- c(35.05, 45.2)
-    states <- c("Maine", "New Hampshire", "Massachusetts", "Vermont", "New York", "Rhode Island", "Connecticut", "Delaware", "New Jersey", "Maryland", "Pennsylvania", "Virginia", "North Carolina", "South Carolina", "Georgia", "Florida", "District of Columbia", "West Virgina")
+    states <- c("Maine", "New Hampshire", "Massachusetts", "Vermont", "New York", "Rhode Island", "Connecticut", "Delaware", "New Jersey", "Maryland", "Pennsylvania", "Virginia", "North Carolina", "South Carolina", "Georgia", "Florida", "District of Columbia", "West Virginia")
     provinces <- c("Ontario", "Québec", "Nova Scotia", "New Brunswick")
     us <- raster::getData("GADM",country="USA",level=1)
     us.states <- us[us$NAME_1 %in% states,]

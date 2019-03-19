@@ -26,7 +26,7 @@ ref.tables.path<- paste(stem.dir, "COCA-conf/SDM and CFDERS Integration/Data/Ref
 proc.summ.path<- paste(stem.dir, "COCA-conf/SDM and CFDERS Integration/Processed Summaries/", sep = "")
 
 # Path to SDM results
-sdm.path<- paste(stem.dir, "COCA-conf/SDM and CFDERS Integration/SDM Projections/", sep = "")
+sdm.path<- paste(stem.dir, "COCA-conf/SDM and CFDERS Integration/Data/SDM Projections/", sep = "")
 
 # Executing functions -----------------------------------------------------
 # First, bind_cfders to get cfders data together. This function takes a long time, so it is currently set within a run statement. If you want to run it to see if it works, set run = TRUE.
@@ -44,7 +44,7 @@ if(run){
 
 # After successfully creating reference tables to communicate between CFDERS fisheries data and VTR community fishing data, we can now proceed with calculating fisheries data summaries, joining these with species distribution model projections, and calculating community level importance weighted change vulnerability metrics. 
 # Summarizing CFDERS data
-cfders.summ<- summarize_cfders(landings.path = landings.path, ref.tables.path = ref.tables.path, out.path = proc.summ.path, focal.comms = c("STONINGTON_ME", "PORTLAND_ME", "NEW BEFORD_MA", "POINT JUDITH_RI"))
+cfders.summ<- summarize_cfders(landings.path = landings.path, ref.tables.path = ref.tables.path, out.path = proc.summ.path, focal.comms = c("STONINGTON_ME", "PORTLAND_ME", "NEW BEDFORD_MA", "POINT JUDITH_RI"))
 
 # In addition to writing these to a folder, each is saved in the cfders.summ object, which is a list:
 names(cfders.summ)
@@ -57,7 +57,7 @@ str(gar.summ)
 
 # Joining CFDERS and GAR fisheries data to species distribution model projections. Although a bit less efficient, to keep things simpler, this function needs to run with three different landings files: (1) the CFDERS "FocalComm.Spp.Gearsummary" summary file; (2) the "Comm.Sppsummary" summary file and (3) the "GARsummary" file. Instead of doing this one at a time, we can write a quick loop to get them all done.
 # Vector of all three of the different fisheries data sets
-landings.files<- paste(landings.path, c("FocalComm.Spp.Gearsummary.csv", "Comm.Sppsummary.csv", "GARsummary.csv"), sep = "")
+landings.files<- paste(proc.summ.path, c("FocalComm.Spp.Gearsummary.csv", "Comm.Sppsummary.csv", "GARsummary.csv"), sep = "")
 
 # Empty list to store results
 sdm.land.merge<- vector("list", length(landings.files))
@@ -66,7 +66,7 @@ names(sdm.land.merge)<- c("FocalComm.Spp.Gearsummary.csv", "Comm.Sppsummary.csv"
 # Quick loop to run each through the "sdm_landings_merged" function, and save each one as part of an overall list
 for(i in seq_along(landings.files)){
   file.use<- landings.files[i]
-  sdm.land.merge[[i]]<- sdm_landings_merged(sdm.path = sdm.path, landings.file = file.use, focal.comms = c("STONINGTON_ME", "PORTLAND_ME", "NEW BEDFORD_MA", "POINT JUDITH_RI"), out.path = proc.summ.path)
+  sdm.land.merge[[i]]<- sdm_landings_merged(sdm.path = sdm.path, landings.file = file.use, focal.comms = c("STONINGTON_ME", "PORTLAND_ME", "NEW BEDFORD_MA", "POINT JUDITH_RI"), ref.tables.path = ref.tables.path, out.path = proc.summ.path)
   print(paste(file.use, " is done", sep = ""))
 }
 
