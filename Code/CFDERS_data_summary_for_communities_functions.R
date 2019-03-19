@@ -345,16 +345,16 @@ summarize_cfders<- function(landings.path = landings.path, ref.tables.path = ref
   # End function
 } 
 
-summarize_valport<- function(landings.path = landings.path, ref.tables.path = ref.tables.path, out.path = landings.path){
+summarize_gar<- function(landings.path = landings.path, ref.tables.path = ref.tables.path, out.path = landings.path){
   ## Details
-  # This function summarizes the valport9615 file to get the total landings by community and species for the 2011 to 2015 baseline period
+  # This function summarizes the GAR landings file to get the total landings by community and species for the 2011 to 2015 baseline period
   
   # Args:
-  # landings.path = Path to the CFDERS datafile (created by bind_cfders)
+  # landings.path = Path to the GAR 1982-2015 datafile 
   # ref.tables.path = Path to VTR_CFDERS matching names reference table
-  # out.path = Path to save new valport landings file
+  # out.path = Path to save new GAR landings file
  
-  # Returns: NULL, simply saves new created file
+  # Returns: Tidy dataset and saves new created file
   
   ## Start function
   # Install libraries
@@ -366,43 +366,19 @@ summarize_valport<- function(landings.path = landings.path, ref.tables.path = re
     ref.tables.path =  "/Volumes/Shared/Research/COCA-conf/SDM and CFDERS Integration/Data/Reference Tables/"
     out.path = landings.path
   }
+
   
-  # Bring in valport data
-  # 1996-2015
-  # excel.path<- paste(landings.path, "valport9615.xlsx", sep = "") 
-  # valport.all<- excel.path %>%
-  #   excel_sheets() %>% 
-  #   set_names() %>% 
-  #   map(read_excel, path = excel.path)
-  # 
-  # # Subset to keep only baseline years 
-  # keep.years<- c("2011", "2012", "2013", "2014", "2015")
-  # valport.base<- valport.all[which(names(valport.all) %in% keep.years)] 
-  # 
-  # # Convert to DF
-  # valport.df<- bind_rows(valport.base)
-  # colnames(valport.df)[2]<- "Port"
-  # 
-  # # Baseline sums
-  # valport1115<- valport.df %>%
-  #   group_by(Port) %>%
-  #   summarize_if(is.numeric, sum, na.rm = T) %>%
-  #   dplyr::select(., -YEAR)
-  # 
-  # # Save it
-  # write_csv(valport1115, paste(out.path, "valport1115.csv", sep = ""))
-  
-  # Bring in valport data 
-  valport.df<- read_csv(paste(landings.path, "Mills_1982-2015 GAR Landings combined sheets.csv", sep = ""))
+  # Bring in GAR data 
+  gar.df<- read_csv(paste(landings.path, "Mills_1982-2015 GAR Landings combined sheets.csv", sep = ""))
   
   # Subset years
   keep.years<- c(2011, 2012, 2013, 2014, 2015)
-  valport.base<- valport.df %>%
+  gar.base<- gar.df %>%
     filter(., YEAR %in% keep.years) 
-  colnames(valport.base)<- tolower(colnames(valport.base))
+  colnames(gar.base)<- tolower(colnames(gar.base))
   
   # Summarize
-  yr.comm.spp<- valport.base %>%
+  yr.comm.spp<- gar.base %>%
     group_by(year, port, state, species) %>% 
     summarize(.,
               "sppvalue.sum" = sum(value, na.rm = TRUE),
@@ -419,14 +395,14 @@ summarize_valport<- function(landings.path = landings.path, ref.tables.path = re
               "Meanspplndlb" = mean(spplndlb.sum, na.rm = TRUE)) %>%
     ungroup()
   
-  # Save comm.spp file
+  # Save comm.spp file and return it
   write_csv(comm.spp, path = paste(out.path, "GARsummary.csv", sep = ""))
-  
+  return(comm.spp)
   
   # End function
 }
 
-sdm_landings_merged<- function(sdm.path, landings.file, focal.comms = c("STONINGTON_ME", "PORTLAND_ME", "NEW BEDFORD_MA", "POINT JUDITH_RI"), out.path = proc.summ.path){
+sdm_landings_merged<- function(sdm.path = sdm.path, landings.file, focal.comms = c("STONINGTON_ME", "PORTLAND_ME", "NEW BEDFORD_MA", "POINT JUDITH_RI"), ref.tables.path = ref.tables.path, out.path = proc.summ.path){
   ## Details
   # This function merges landings data (either from CFDERS OR GAR) to the projected species distribution model changes results and model fit results. Depending on which file is referenceD (CFDERS Focalcomm.Spp.Gear, CFDERS Comm.Spp, GAR), the produced file will be slightly different.
   
@@ -434,9 +410,10 @@ sdm_landings_merged<- function(sdm.path, landings.file, focal.comms = c("STONING
   # sdm.path = Path to the SDM "EcoToEconPortData03032019.csv" file and "mod.results.csv" file
   # landings.file = Path to either CFDERS "FocalComm.Spp.Gearsummary" summary file or "Comm.Sppsummary" summary file or GARsummary" file
   # focal.comms = Vector of focal communities, needed to run the CFDERS FocalComm.Spp.Gear component.
+  # ref.tables.path = Path to community lat long file
   # out.path = Path to save new file that merges landed value and volume importance weights to the SDM EcoToEcon results -- hierarchy will be slightly different as if CFDERS FocalComm.Spp.Gear is supplied, weighting is done at a community - gear level. 
 
-  # Returns: NULL; simply saves files in out.path
+  # Returns: Joined dataset, which is also saved as csv to out.path
   
   ## Start function
   # Install libraries
@@ -516,8 +493,9 @@ sdm_landings_merged<- function(sdm.path, landings.file, focal.comms = c("STONING
     comm.diffs.nas<- comm.diffs[is.na(comm.diffs$Long),]
     # Seems okay...
     
-    # Write this out
+    # Write this out and return it
     write.csv(comm.diffs, file = paste(out.path, "SpeciesFocalCommunityGearTypeCFDERSWeightedChanges.csv", sep= ""))
+    return(comm.diffs)
   }
   
   if(file.use == "Comm.Sppsummary.csv"){
@@ -569,8 +547,9 @@ sdm_landings_merged<- function(sdm.path, landings.file, focal.comms = c("STONING
       mutate(., "ChangeWeightedValue" = ProjectionValue*ProportionValue,
              "ChangeWeightedVolume" = ProjectionValue*ProportionVolume)
     
-    # Write this out
+    # Write this out and save it
     write.csv(comm.diffs, file = paste(out.path, "SpeciesCommunityCFDERSWeightedChanges.csv", sep= ""))
+    return(comm.diffs)
   }
   
   if(file.use == "landport1115.csv"){
@@ -724,7 +703,7 @@ sdm_landings_merged<- function(sdm.path, landings.file, focal.comms = c("STONING
       left_join(., mod.stats)
     
     # Bring in long/lat
-    longlat<- read_csv("/Volumes/Shared/Research/COCA-conf/SDM and CFDERS Integration/Data/Reference Tables/VTR_CFDERS_Comparison_Edited_NoCounties_LongLat.csv") %>%
+    longlat<- read_csv(paste(ref.tables.path, "VTR_CFDERS_Comparison_Edited_NoCounties_LongLat.csv", sep = "")) %>%
       dplyr::select(., PORT, Long, Lat) 
     colnames(longlat)[1]<- "CFDERSPortCode"
     
@@ -768,8 +747,9 @@ sdm_landings_merged<- function(sdm.path, landings.file, focal.comms = c("STONING
       mutate(., "ChangeWeightedValue" = ProjectionValue*ProportionValue,
              "ChangeWeightedVolume" = ProjectionValue*ProportionVolume)
     
-    # Write this out
+    # Write this out and save it
     write_csv(comm.diffs, paste(out.path, "SpeciesCommunityGARWeightedChanges.csv", sep= ""))
+    return(comm.diffs)
   }
 
   # End function
@@ -789,7 +769,7 @@ community_weighted_changes<- function(sdm.landings.file, projection.scenario = c
   
   ## Start function
   # Install libraries
-  library_check(c("tidyverse", "raster", "rgeos", "ggplot2", "viridis", "cowplot", "sp"))
+  library_check(c("tidyverse", "raster", "rgeos", "ggplot2", "viridis", "cowplot", "sp", "tigris", "ggthemes"))
   
   # Set arguments for debugging -- this will NOT run when you call the function. Though, you can run each line inside the {} and then you will have everything you need to walk through the rest of the function.
   if(FALSE){
@@ -894,6 +874,30 @@ community_weighted_changes<- function(sdm.landings.file, projection.scenario = c
     us.states.f<- fortify(us.states, NAME_1)
     ca.provinces.f<- fortify(ca.provinces, NAME_1)
     
+    # Can we get the sdm land dat data into a nicer format for visualization?
+    counties<- counties(states, cb = TRUE)
+    counties<- spTransform(counties, proj.wgs84)
+    counties@data$id <- rownames(counties@data)
+    counties.f<- fortify(counties)
+    counties.f<- counties.f %>%
+      left_join(., counties@data, by = "id")
+    
+    # Group sdm.land dat by projection scenario, and for each, calculate the average weighted change at the community level
+    sdm.land.dat.pts<- data.frame("Long" = sdm.land.dat$Long, "Lat" = sdm.land.dat$Lat)
+    coordinates(sdm.land.dat.pts)<- ~Long+Lat
+    proj4string(sdm.land.dat.pts)<- proj.wgs84
+    
+    sdm.land.dat$GEOID<- over(sdm.land.dat.pts, counties)$GEOID
+   
+    sdm.land.plot<- sdm.land.dat %>%
+      group_by(GEOID, ProjectionScenario) %>%
+      summarize(., 
+                "TotalChangeValue" = mean(TotalChangeValue, na.rm = TRUE), 
+                "TotalChangeVolume" = mean(TotalChangeVolume, na.rm = TRUE))
+    
+    sdm.land.plot<- sdm.land.plot %>%
+      left_join(., counties.f)
+    
     # Alright, plot time
     plot.out.value<- ggplot() +
       # Update "fill" and "color" to change map color
@@ -903,13 +907,14 @@ community_weighted_changes<- function(sdm.landings.file, projection.scenario = c
       geom_map(data = ca.provinces.f, map = ca.provinces.f,
                aes(map_id = id, group = group),
                fill = "#d9d9d9", color = "gray45", size = 0.15) +
-      geom_point(data = sdm.land.dat, aes(x = Long, y = Lat, fill = TotalChangeValue), shape = 21, size = 4.5, alpha = 0.65) +
+      geom_polygon(data = sdm.land.plot, aes(x = long, y = lat, fill = TotalChangeValue, group = group), color = "gray45") +
       # Here you'd make adjustments to the point colors...
       scale_fill_gradient2(name = "Value", low = "blue", mid = "white", high = "red") +
       ylim(ylim.use) + ylab("Lat") +
       scale_x_continuous("Long", breaks = c(-75.0, -70.0, -65.0), labels = c("-75.0", "-70.0", "-65.0"), limits = xlim.use) +
       coord_fixed(1.3) +
-      theme(panel.background = element_rect(fill = "white", color = "black"), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), strip.background = element_rect(fill="white", color = "black"))
+      theme(panel.background = element_rect(fill = "white", color = "black"), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), strip.background = element_rect(fill="white", color = "black")) +
+      facet_wrap(~ProjectionScenario)
     
     plot.out.volume<- ggplot() +
       # Update "fill" and "color" to change map color
@@ -919,15 +924,16 @@ community_weighted_changes<- function(sdm.landings.file, projection.scenario = c
       geom_map(data = ca.provinces.f, map = ca.provinces.f,
                aes(map_id = id, group = group),
                fill = "#d9d9d9", color = "gray45", size = 0.15) +
-      geom_point(data = sdm.land.dat, aes(x = Long, y = Lat, fill = TotalChangeVolume), shape = 21, size = 4.5, alpha = 0.65) +
+      geom_polygon(data = sdm.land.plot, aes(x = long, y = lat, fill = TotalChangeValue, group = group), color = "gray45") +
       # Here you'd make adjustments to the point colors...
       scale_fill_gradient2(name = "Volume", low = "blue", mid = "white", high = "red") +
       ylim(ylim.use) + ylab("Lat") +
       scale_x_continuous("Long", breaks = c(-75.0, -70.0, -65.0), labels = c("-75.0", "-70.0", "-65.0"), limits = xlim.use) +
       coord_fixed(1.3) +
-      theme(panel.background = element_rect(fill = "white", color = "black"), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), strip.background = element_rect(fill="white", color = "black"))
+      theme(panel.background = element_rect(fill = "white", color = "black"), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), strip.background = element_rect(fill="white", color = "black")) +
+      facet_wrap(~ProjectionScenario)
     
-    plot.out<- plot_grid(plot.out.value, plot.out.volume, nrow = 1, labels = c("Value", "Volume"))
+    plot.out<- plot_grid(plot.out.value, plot.out.volume, nrow = 2, labels = c("Value", "Volume"))
     ggsave(paste(out.path, gsub(".csv", "", file.use), "CommunityAggregatedWeightedChanges.jpg", sep = ""), plot.out, width = 11, height = 8, units = "in")
     
   }

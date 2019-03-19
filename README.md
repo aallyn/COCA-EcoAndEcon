@@ -12,7 +12,7 @@ The functions within this repository, located in "CFDERS_data_summary_for_commun
 2 - Summarize fisheries data and then use summary values (total and annual average 2011-2015) to calculate an importance metric for each fish species in every community
   Functions:
   + summarize_cfders = Summarizes CFDERS fisheries data (total landed value and volume, annual average landed value and volume and unique dealers) by community, gear and species (for focal ports) or just by community. Exports summary csv files. 
-  + summarize_valport = Summarizes GAR fisheries data (total landed value and volume, annual average landed value and volume) by community and species. Exports summary csv file.
+  + summarize_gar = Summarizes GAR fisheries data (total landed value and volume, annual average landed value and volume) by community and species. Exports summary csv file.
   + sdm_landings_merged = Joins summarized CFDERS fisheries data and GAR fisheries data to species distribution model projections. Exports csv file with distribution model projections, fit statistics, and fisheries data (landed value/volume, importance). 
 
 3 - Weight projected species distribution changes by fisheries importance and then plot these importance weighted distribution changes for all of the communities evaluated within the Northeast U.S. Shelf Large Marine Ecosystem. 
