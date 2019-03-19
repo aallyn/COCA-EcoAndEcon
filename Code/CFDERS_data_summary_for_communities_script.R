@@ -11,6 +11,22 @@ source(paste(code.path, "CFDERS_data_summary_for_communities_functions.R", sep =
 # This should have loaded three functions: library_check, bind_cfders, cfders_community_name_match, summarize_cfders. The library check is just a helper function the rest use to make sure required libraries are installed. bind_cfders is a function that reads in each of the eyarly data sets and saves the full data file. cfders_community_name_match works on matching cfders ports with vtr community names. summarize_cfders provides data summaries on landed value, volume, and unique dealers for different hierarchical groupings (e.g., year*community, year*community*species*gear)
 
 # Running them
+# First, set stem directory to the Research folder on the shared drive, which will be different on a Mac than PC. After doing this, we can then generate all the folder paths to execute subsequent functions. 
+# Change stem directory
+stem.dir<-  "/Volumes/Shared/Research/"
+
+# Path to the CFDERS yearly data file:
+landings.path<- paste(stem.dir, "COCA-conf/SDM and CFDERS Integration/Data/Landings/", sep = "")
+
+# Path to the references tables folder, which includes things unique VTR communities, unique CFDERS ports, and eventually the VTR_CFDERS name matches with long/lats
+ref.tables.path<- paste(stem.dir, "COCA-conf/SDM and CFDERS Integration/Data/Reference Tables/", sep = "")
+
+# Path to save processed CFDERRS files (summaries of trip data to different levels)
+proc.summ.path<- paste(stem.dir, "COCA-conf/SDM and CFDERS Integration/Processed Summaries/", sep = "")
+
+# Path to SDM results
+sdm.path<- paste(stem.dir, "COCA-conf/SDM and CFDERS Integration/SDM Projections/", sep = "")
+
 # First, bind_cfders to get cfders data together -- should only need to do this once, but worth checking to see if the function works.
 bind_cfders(data.path = "/Volumes/Shared/Research/COCA-conf/Landings/data", 
             out.path = "/Volumes/Shared/Research/COCA-conf/Landings/data/")
