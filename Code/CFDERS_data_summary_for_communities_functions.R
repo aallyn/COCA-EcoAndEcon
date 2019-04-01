@@ -787,7 +787,7 @@ community_weighted_changes<- function(sdm.landings.file, projection.scenario = c
   
   # Set arguments for debugging -- this will NOT run when you call the function. Though, you can run each line inside the {} and then you will have everything you need to walk through the rest of the function.
   if(FALSE){
-    sdm.landings.file<- "/Volumes/Shared/Research/COCA-conf/SDM and CFDERS Integration/Processed Summaries/SpeciesFocalCommunityGearTypeCFDERSWeightedChanges.csv"
+    sdm.landings.file<- "/Volumes/Shared/Research/COCA-conf/SDM and CFDERS Integration/Processed Summaries/SpeciesCommunityCFDERSWeightedChanges.csv"
     projection.scenario<- "Raw"
     out.path<- "/Volumes/Shared/Research/COCA-conf/SDM and CFDERS Integration/Processed Summaries/"
     plot.path<- "/Volumes/Shared/Research/COCA-conf/SDM and CFDERS Integration/Processed Summaries/"
@@ -822,7 +822,7 @@ community_weighted_changes<- function(sdm.landings.file, projection.scenario = c
     sdm.land.dat$ProjectionScenario<- factor(sdm.land.dat$ProjectionScenario, levels = scenarios.levels)
     
     # Save the file
-    write_csv(sdm.land.dat, paste(out.path, "FocalCommunityGearAggregatedCFDERSWeightedChanges.csv", sep = ""))
+    write_csv(sdm.land.dat, paste(out.path, "FocalCommunityGearAggregatedCFDERS", projection.scenario, "WeightedChanges.csv", sep = ""))
   }
   
   # Communities with CFDERS landings data
@@ -831,7 +831,7 @@ community_weighted_changes<- function(sdm.landings.file, projection.scenario = c
     sdm.land.dat<- read_csv(sdm.landings.file) %>%
       filter(., ProjectionScenario %in% scenarios.use) %>%
       filter(., Footprint == "Regular") %>%
-      group_by(Community, Long, Lat, Gear, ProjectionScenario) %>%
+      group_by(Community, Long, Lat, ProjectionScenario) %>%
       summarize(., "TotalChangeValue" = sum(ChangeWeightedValue, na.rm = TRUE),
                 "TotalChangeVolume" = sum(ChangeWeightedVolume, na.rm = TRUE))
     
@@ -839,7 +839,7 @@ community_weighted_changes<- function(sdm.landings.file, projection.scenario = c
     sdm.land.dat$ProjectionScenario<- factor(sdm.land.dat$ProjectionScenario, levels = scenarios.levels)
     
     # Save the file
-    write_csv(sdm.land.dat, paste(out.path, "CommunityAggregatedCFDERSWeightedChanges.csv", sep = ""))
+    write_csv(sdm.land.dat, paste(out.path, "CommunityAggregatedCFDERS", projection.scenario, "WeightedChanges.csv", sep = ""))
   }
   
   # Communities with GAR data
@@ -866,7 +866,7 @@ community_weighted_changes<- function(sdm.landings.file, projection.scenario = c
     sdm.land.dat$ProjectionScenario<- factor(sdm.land.dat$ProjectionScenario, levels = scenarios.levels)
     
     # Save the file
-    write_csv(sdm.land.dat, paste(out.path, "CommunityAggregatedGARWeightedChanges.csv", sep = ""))
+    write_csv(sdm.land.dat, paste(out.path, "CommunityAggregatedGAR", projection.scenario, "WeightedChanges.csv", sep = ""))
   }
   
   # Now plotting
@@ -955,88 +955,72 @@ community_weighted_changes<- function(sdm.landings.file, projection.scenario = c
   # End function
 }
 
-community_successfulmodels<- function(sdm.path, cfders.path, mod.criteria, out.path){
+community_successfulmodels<- function(sdm.landings.file, mod.criteria = "AUC", mod.cut = 0.7, percent = 0.75, out.path){
   # This function calculates and plots the proportion of successfully modeled species for each port according to value and volume
   
   # Args:
-  # sdm.path = Path to the file that has species model fit results 
-  # cfders.path = Path to the file with community species fisheries summaries "Comm.Sppsummary.csv"
+  # sdm.landings.file = Path to the file that has species distribution model and landings information
   # mod.criteria = Character string signaling which model selection criteria to use (AUC only now)
+  # mod.cut = Numeric AUC value to use for the cut off
+  # percent = Percentage of landings to use to determine if community meets model cutoff or not
   # out.path = Path to save summary output file
   
-  # Returns: 
+  # Returns: Community, ProportionValue and ProportionVolume successfully modeled dataframe (also saved to out.path). Function also outputs a map of communities where we successfully model at least a certain proportion of the species. 
+  
+  # Preliminaries
   library_check(c("tidyverse", "raster", "rgeos", "ggplot2", "viridis", "cowplot"))
   
   # Debugging
   if(FALSE){
-    cfders.path<-  "/Volumes/Shared/Research/COCA-conf/Landings/summaries/"
-    sdm.path<- "~/GitHub/COCA/Results/"
-    mod.criteria<- 
-      out.path<- "/Volumes/Shared/Research/COCA-conf/Landings/summaries/"
+    sdm.landings.file<- "/Volumes/Shared/Research/COCA-conf/SDM and CFDERS Integration/Processed Summaries/SpeciesCommunityCFDERSWeightedChanges.csv"
+    mod.criteria<- "AUC"
+    mod.cut<- 0.7
+    percent<- 0.75
+    out.path<- "/Volumes/Shared/Research/COCA-conf/SDM and CFDERS Integration/Processed Summaries/"
   }
   
-  # Model fit statistics -- AUC greater than 0.7 in both seasons
+  # Determine sdm.landings file name
+  file.use<- basename(sdm.landings.file)
+  
+  # Model fit statistics 
   mod.stats<- read_csv(paste(sdm.path, "mod.results.csv", sep = "")) %>%
-    mutate(., "AUC.Check" = ifelse(AUC.SDM >= 0.7, 1, 0))
+    mutate(., "AUC.Check" = ifelse(AUC.SDM >= mod.cut, 1, 0))
   
   auc.check<- mod.stats %>%
     group_by(COMNAME) %>%
     summarize_at(., .vars = "AUC.Check", sum, na.rm = TRUE) %>%
     filter(., AUC.Check == 2)
   
-  mod.keep<- mod.stats %>%
-    filter(., COMNAME  %in% auc.check$COMNAME) %>%
-    group_by(COMNAME) %>%
-    summarize_if(., is.numeric, mean, na.rm = TRUE) %>%
-    dplyr::select(., -X1, -AUC.Check)
-  colnames(mod.keep)[1]<- "CommonName"
+  spp.keep<- mod.stats %>%
+    filter(., COMNAME  %in% auc.check$COMNAME) 
+  spp.keep<- unique(spp.keep$COMNAME)
   
-  # Fisheries landings data
-  fish.dat<- read_csv(paste(cfders.path, "Comm.Sppsummary.csv", sep = ""))
-  colnames(fish.dat)<- c("Community", "CFDERSCommonName", "TotalValue", "TotalVolume", "MeanValue", "MeanVolume", "DistinctDealers")
-  
-  # LongLat Data
-  google.api<- "AIzaSyDqGwT79r3odaMl0Hksx9GZhHmqe37KSEQ"
-  register_google(key = google.api)
-  geos.longlats<- geocode(location = unique(comm.models$Community), output = "latlon")
-  comm.geo<- data.frame("Community" = unique(comm.models$Community), "Long" = geos.longlats$lon, "Lat" = geos.longlats$lat)
-  
-  # Now, get total community value and volume
-  fish.dat.agg<- fish.dat %>%
-    left_join(., comm.geo) %>%
-    group_by(., Community, Long, Lat) %>%
-    summarize(., "CommTotalValue" = sum(TotalValue, na.rm = TRUE),
-              "CommTotalVolume" = sum(TotalVolume, na.rm = TRUE))
-  
-  # Join community totals to community-species-gear dataset and then calculate proportion
-  fish.dat<- fish.dat %>%
-    left_join(., fish.dat.agg) %>%
-    mutate(., "ProportionValue" = TotalValue/CommTotalValue,
-           "ProportionVolume" = TotalVolume/CommTotalVolume)
-  
-  # Fix species common names
-  cfders.sppnames<- read_csv("~/GitHub/COCA/Data/spp_names_stripcommas.csv") %>%
-    dplyr::select(., comma_names, nice_names)
-  colnames(cfders.sppnames)<- c("CFDERSCommonName", "CommonName")
-  
-  fish.dat<- fish.dat %>%
-    left_join(cfders.sppnames)
-  
-  # Now merge with model stats
-  fish.dat<- fish.dat %>%
-    left_join(., mod.keep)
-  
-  # Finally, we want to calculate the total proportional value for models fitting some criteria
-  comm.models<- fish.dat %>%
-    filter(., AUC.SDM >= 0.7) %>%
-    group_by(Community, Long, Lat) %>%
-    summarize(., 
-              "ProportionValueSuccessfulModeled" = sum(ProportionValue, na.rm = T),
-              "ProportionVolumeSuccessfulModeled" = sum(ProportionVolume, na.rm = T)) %>%
-    mutate(., "SuccessfulModelCheck" = ifelse(ProportionValueSuccessfulModeled >= 0.75 & ProportionVolumeSuccessfulModeled >= 0.75, "Yes", "No")) %>%
-    arrange(-ProportionValueSuccessfulModeled)
-  write.csv(comm.models, file = paste(out.path, "CommunitySuccessfulModels_03032019.csv", sep= ""))
-  comm.models$SuccessfulModelCheck<- factor(comm.models$SuccessfulModelCheck, levels = c("Yes", "No"))
+  if(file.use == "SpeciesCommunityCFDERSWeightedChanges.csv"){
+    # Read in sdm.landings data, filter to projection scenario)
+    sdm.land.dat<- read_csv(sdm.landings.file) %>%
+      dplyr::select(., -X1) %>%
+      filter(., CommonName %in% spp.keep & ProjectionScenario == "Baseline.combo.b") 
+    
+    # Now, determine how well we did modeling species in each community based on their importance (value or volume)
+    sdm.successful<- sdm.land.dat %>%
+      group_by(Community, Long, Lat) %>%
+      summarize(., 
+                "ProportionValueSuccessfulModeled" = sum(ProportionValue, na.rm = T),
+                "ProportionVolumeSuccessfulModeled" = sum(ProportionVolume, na.rm = T)) %>%
+      mutate(., "SuccessfulValueCheck" = ifelse(ProportionValueSuccessfulModeled >= percent, "Yes", "No"),
+             "SuccessfulVolumeCheck" = ifelse(ProportionVolumeSuccessfulModeled >= percent, "Yes", "No"))
+    
+    write.csv(sdm.successful, file = paste(out.path, "CommunitySuccessfulModels_03152019.csv", sep= ""))
+    sdm.successful$SuccessfulValueCheck<- factor(sdm.successful$SuccessfulValueCheck, levels = c("Yes", "No"))
+    sdm.successful$SuccessfulVolumeCheck<- factor(sdm.successful$SuccessfulVolumeCheck, levels = c("Yes", "No"))
+    
+    sdm.succ.l<- sdm.successful %>%
+      dplyr::select(., Community, Long, Lat, SuccessfulValueCheck, SuccessfulVolumeCheck) %>%
+      gather(., "Check", "Value", -Community, -Long, -Lat)
+    sdm.succ.l$Value<- factor(sdm.succ.l$Value, levels = c("Yes", "No"))
+    
+    return(sdm.successful)
+  }
   
   # Plot
   # Spatial projections
@@ -1064,19 +1048,16 @@ community_successfulmodels<- function(sdm.path, cfders.path, mod.criteria, out.p
     geom_map(data = ca.provinces.f, map = ca.provinces.f,
              aes(map_id = id, group = group),
              fill = "#d9d9d9", color = "gray45", size = 0.15) +
-    geom_point(data = comm.models, aes(x = Long, y = Lat, fill = SuccessfulModelCheck), shape = 21, size = 2.5, alpha = 0.9) +
+    geom_point(data = sdm.succ.l, aes(x = Long, y = Lat, fill = Value), shape = 21, size = 2.5, alpha = 0.9) +
     # Here you'd make adjustments to the point colors...
-    scale_fill_manual(name = "Greater than 75% modeled species", values = c("#4daf4a", "Black")) +
+    scale_fill_manual(name = "Proportion of successful modeled species", values = c("#4daf4a", "Black")) +
     ylim(ylim.use) + ylab("Lat") +
     scale_x_continuous("Long", breaks = c(-75.0, -70.0, -65.0), labels = c("-75.0", "-70.0", "-65.0"), limits = xlim.use) +
     coord_fixed(1.3) +
-    theme(panel.background = element_rect(fill = "white", color = "black"), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), strip.background = element_rect(fill="white", color = "black"))
+    theme(panel.background = element_rect(fill = "white", color = "black"), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), strip.background = element_rect(fill="white", color = "black")) +
+    facet_wrap(~Check)
   
-  ggsave(paste(out.path, "CommunitySuccessfulModels.jpg", sep = ""), plot.out, width = 11, height = 8, units = "in")
-  ggsave(paste("~/Desktop/", "CommunitySuccessfulModels.jpg", sep = ""), plot.out, width = 11, height = 8, units = "in")
-  
-  
-  
-  
-  
+  ggsave(paste(out.path, "SuccessfulModels", mod.criteria, "_", mod.cut, ".jpg", sep = ""), plot.out, width = 18, height = 12, units = "in")
+
+  # End function
 }

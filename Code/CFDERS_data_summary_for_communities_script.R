@@ -70,7 +70,7 @@ for(i in seq_along(landings.files)){
   print(paste(file.use, " is done", sep = ""))
 }
 
-# Final step, summarize improtance weighted changes across communities and make a map of these vulnerability values across the Northeast Shelf Large Marine Ecosystem
+# Summarize improtance weighted changes across communities and make a map of these vulnerability values across the Northeast Shelf Large Marine Ecosystem
 # Again, we can execute a loop given that each of these could be done for the three different files created by the "sdm_landings_merged" function. 
 # Vector of all three of the different fisheries data sets
 sdm.land.files<- paste(proc.summ.path, c("SpeciesFocalCommunityGearTypeCFDERSWeightedChanges.csv", "SpeciesCommunityCFDERSWeightedChanges.csv", "SpeciesCommunityGARWeightedChanges.csv"), sep = "")
@@ -82,7 +82,36 @@ names(comm.vuln)<- c("FocalCommunityGearAggregatedCFDERSWeightedChanges.csv", "C
 # Quick loop to run each through the "sdm_landings_merged" function, and save each one as part of an overall list
 for(i in seq_along(sdm.land.files)){
   file.use<- sdm.land.files[i]
-  comm.vuln[[i]]<- community_weighted_changes(sdm.landings.file = file.use, projection.scenario = c("Raw"), out.path = proc.summ.path, plot = TRUE)
+  comm.vuln[[i]]<- community_weighted_changes(sdm.landings.file = file.use, projection.scenario = c("Percent"), out.path = proc.summ.path, plot = TRUE)
   print(paste(file.use, " is done", sep = ""))
 }
+
+
+# Looking at each community, how confident can we be in our modeling effort to say that we are actually successfully modeling species important to each of the ports? For this, only going to use the CFDERS sdm.landings merged data file and then the community_successfulmodels function, which calculates the total proportion of landed value/volume across species with at least AUC of >0.7 in both seasons (this could be changed to assess other model fit criteria). Using that filtered dataset, it then codes communities depending on if that total proportion is greater or less than some threshold percentages and maps that information.
+sdm.success<- community_successfulmodels(sdm.landings.file = paste(proc.summ.path, "SpeciesCommunityCFDERSWeightedChanges.csv", sep = ""), mod.criteria = "AUC", mod.cut = 0.7, percent = 0.75, out.path = proc.summ.path)
+
+# Let's look at communities where we failed to successfully model at least 0.75% of landed value/volume...
+sdm.fails<- sdm.success %>%
+  dplyr::filter(., SuccessfulValueCheck == "No" | SuccessfulVolumeCheck == "No")
+
+# Bring in the CFDERS landings data...
+land.dat<- read_csv(paste(proc.summ.path, "Comm.Sppsummary.csv", sep = ""))
+colnames(land.dat)[1:3]<- c("Community", "Long", "Lat")
+
+sdm.fails.val<- sdm.fails %>%
+  left_join(., land.dat) %>%
+  dplyr::select(., Community, Long, Lat, ProportionValueSuccessfulModeled, spp_common_name, Totalsppvalue) %>%
+  arrange(., -Totalsppvalue) %>%
+  spread(., spp_common_name, Totalsppvalue)
+write_csv(sdm.fails.val, paste(proc.summ.path, "CommunitySDMFailuresValue.csv", sep = ""))
+
+
+sdm.fails.vol<- sdm.fails %>%
+  left_join(., land.dat) %>%
+  dplyr::select(., Community, Long, Lat, ProportionVolumeSuccessfulModeled, spp_common_name, Totalspplndlb) %>%
+  arrange(., -Totalspplndlb) %>%
+  dplyr::filter(!)
+  spread(., spp_common_name, Totalspplndlb)
+write_csv(sdm.fails.vol, paste(proc.summ.path, "CommunitySDMFailuresVolume.csv", sep = ""))
+
 
