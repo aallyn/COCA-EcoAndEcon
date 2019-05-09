@@ -348,7 +348,6 @@ summarize_cfders<- function(landings.path = landings.path, ref.tables.path = ref
   out.list[[2]]<- comm.spp
   names(out.list)[2]<- "Comm.Spp"
   
-  
   # Save each independently and then return the list
   for(i in seq_along(out.list)){
     write_csv(data.frame(out.list[[i]]), path = paste(out.path, names(out.list[i]), "summary.csv", sep = ""))
@@ -384,7 +383,6 @@ summarize_gar<- function(landings.path = landings.path, ref.tables.path = ref.ta
   gar.df<- read_csv(paste(landings.path, "Mills_1982-2015 GAR Landings combined sheets.csv", sep = ""),
                     col_types = cols(NHULL = col_integer(),
                                      NDLR = col_integer()))
-  
   # Subset years
   keep.years<- c(2011, 2012, 2013, 2014, 2015)
   gar.base<- gar.df %>%
@@ -436,7 +434,7 @@ sdm_landings_merged<- function(sdm.path = sdm.path, landings.file, focal.comms =
   # Set arguments for debugging -- this will NOT run when you call the function. Though, you can run each line inside the {} and then you will have everything you need to walk through the rest of the function.
   if(FALSE){
     sdm.path<- "/Volumes/Shared/Research/COCA-conf/SDM and CFDERS Integration/Data/SDM Projections/"
-    landings.file<- "/Volumes/Shared/Research/COCA-conf/SDM and CFDERS Integration/Processed Summaries/FocalComm.Spp.Gearsummary.csv"
+    landings.file<- "/Volumes/Shared/Research/COCA-conf/SDM and CFDERS Integration/Processed Summaries/Comm.Spp.Gearsummary.csv"
     focal.comms<- c("STONINGTON_ME", "PORTLAND_ME", "NEW BEDFORD_MA", "POINT JUDITH_RI")
     out.path<- "/Volumes/Shared/Research/COCA-conf/SDM and CFDERS Integration/Processed Summaries/"
   }
@@ -457,8 +455,9 @@ sdm_landings_merged<- function(sdm.path = sdm.path, landings.file, focal.comms =
     comm.diffs<- read_csv(paste(sdm.path, "EcoToEconPortData03152019.csv", sep = "")) %>%
       dplyr::select(., -X1) %>%
       filter(., Community %in% focal.comms & Gear != "All") %>%
-      drop_na(CFDERSCommonName, Value)
-    colnames(comm.diffs)[10]<- "ProjectionValue"
+      drop_na(CFDERSCommonName, Value) %>%
+      distinct(., CommonName, CFDERSCommonName, Community, Gear, Footprint, ProjectionScenario, Statistic, Value)
+    colnames(comm.diffs)[8]<- "ProjectionValue"
       
     # Merge over model results
     comm.diffs<- comm.diffs %>%
@@ -488,7 +487,7 @@ sdm_landings_merged<- function(sdm.path = sdm.path, landings.file, focal.comms =
     # Merge in fisheries landings data -- lat long first...
     comm.longlat<- fish.dat %>%
       dplyr::select(., Community, Long, Lat) %>%
-      unique()
+      distinct()
     
     comm.diffs<- comm.diffs %>%
       left_join(., comm.longlat)
@@ -498,7 +497,7 @@ sdm_landings_merged<- function(sdm.path = sdm.path, landings.file, focal.comms =
       left_join(., fish.dat)
     
     # Calculate weights and then weight changes
-    comm.diffs$ProjectionValue[is.infinite(comm.diffs$ProjectionValue)]<- 500
+    #comm.diffs$ProjectionValue[is.infinite(comm.diffs$ProjectionValue)]<- 500
     comm.diffs<- comm.diffs %>%
       mutate(., "ChangeWeightedValue" = ProjectionValue*ProportionValue,
              "ChangeWeightedVolume" = ProjectionValue*ProportionVolume)
@@ -506,6 +505,10 @@ sdm_landings_merged<- function(sdm.path = sdm.path, landings.file, focal.comms =
     # Characteristics of NAs?
     comm.diffs.nas<- comm.diffs[is.na(comm.diffs$Long),]
     # Seems okay...
+    
+    # Remove Skate issue...
+    comm.diffs<- comm.diffs %>%
+      dplyr::filter(., CFDERSCommonName != "SKATE,LITTLE/WINTER")
     
     # Write this out and return it
     write.csv(comm.diffs, file = paste(out.path, "SpeciesFocalCommunityGearTypeCFDERSWeightedChanges.csv", sep= ""))
@@ -517,8 +520,9 @@ sdm_landings_merged<- function(sdm.path = sdm.path, landings.file, focal.comms =
     # Read in species changes
     comm.diffs<- read_csv(paste(sdm.path, "EcoToEconPortData03152019.csv", sep = "")) %>%
       dplyr::select(., -X1) %>%
-      filter(., Gear == "All")
-    colnames(comm.diffs)[10]<- "ProjectionValue"
+      filter(., Gear == "All") %>%
+      distinct(., CommonName, CFDERSCommonName, Community, Gear, Footprint, ProjectionScenario, Statistic, Value)
+    colnames(comm.diffs)[8]<- "ProjectionValue"
     
     # Merge over model results
     comm.diffs<- comm.diffs %>%
@@ -543,23 +547,24 @@ sdm_landings_merged<- function(sdm.path = sdm.path, landings.file, focal.comms =
     # Merge in fisheries landings data
     comm.longlat<- fish.dat %>%
       dplyr::select(., Community, Long, Lat) %>%
-      unique()
+      distinct()
     
     comm.diffs<- comm.diffs %>%
       left_join(., comm.longlat)
-    
-    # NA lat longs?
-    temp<- comm.diffs[is.na(comm.diffs$Long),]
     
     # Now landings info...
     comm.diffs<- comm.diffs %>%
       left_join(., fish.dat)
     
     # Calculate weights and then weight changes
-    comm.diffs$ProjectionValue[is.infinite(comm.diffs$ProjectionValue)]<- 500
+    #comm.diffs$ProjectionValue[is.infinite(comm.diffs$ProjectionValue)]<- 500
     comm.diffs<- comm.diffs %>%
       mutate(., "ChangeWeightedValue" = ProjectionValue*ProportionValue,
              "ChangeWeightedVolume" = ProjectionValue*ProportionVolume)
+    
+    # Remove Skate issue...
+    comm.diffs<- comm.diffs %>%
+      dplyr::filter(., CFDERSCommonName != "SKATE,LITTLE/WINTER")
     
     # Write this out and save it
     write.csv(comm.diffs, file = paste(out.path, "SpeciesCommunityCFDERSWeightedChanges.csv", sep= ""))
@@ -709,8 +714,9 @@ sdm_landings_merged<- function(sdm.path = sdm.path, landings.file, focal.comms =
     # Read in species changes
     comm.diffs<- read_csv(paste(sdm.path, "EcoToEconPortData03152019.csv", sep = "")) %>%
       dplyr::select(., -X1) %>%
-      filter(., Gear == "All")
-    colnames(comm.diffs)[10]<- "ProjectionValue"
+      filter(., Gear == "All") %>%
+      distinct(., CommonName, CFDERSCommonName, CFDERSPortName, Community, Gear, Footprint, ProjectionScenario, Statistic, Value)
+    colnames(comm.diffs)[9]<- "ProjectionValue"
     
     # Merge over model results
     comm.diffs<- comm.diffs %>%
@@ -718,11 +724,12 @@ sdm_landings_merged<- function(sdm.path = sdm.path, landings.file, focal.comms =
     
     # Bring in long/lat
     longlat<- read_csv(paste(ref.tables.path, "VTR_CFDERS_Comparison_Edited_NoCounties_LongLat.csv", sep = "")) %>%
-      dplyr::select(., PORT, Long, Lat) 
-    colnames(longlat)[1]<- "CFDERSPortCode"
+      dplyr::select(., JGS, Long, Lat) %>%
+      distinct()
+    colnames(longlat)[1]<- "Community"
     
     comm.diffs<- comm.diffs %>%
-      left_join(longlat)
+      left_join(., longlat, by = "Community")
     
     # Need to adjust CFDERSPortName to match up with LandPort file convention...
     comm.diffs$Match<- str_replace_all(comm.diffs$CFDERSPortName, "[^[:alnum:]]", "")
@@ -756,10 +763,14 @@ sdm_landings_merged<- function(sdm.path = sdm.path, landings.file, focal.comms =
     summary(comm.diffs)
     
     # Calculate weights and then weight changes
-    comm.diffs$ProjectionValue[is.infinite(comm.diffs$ProjectionValue)]<- 500
+    #comm.diffs$ProjectionValue[is.infinite(comm.diffs$ProjectionValue)]<- 500
     comm.diffs<- comm.diffs %>%
       mutate(., "ChangeWeightedValue" = ProjectionValue*ProportionValue,
              "ChangeWeightedVolume" = ProjectionValue*ProportionVolume)
+    
+    # Remove Skate issue...
+    comm.diffs<- comm.diffs %>%
+      dplyr::filter(., CFDERSCommonName != "SKATE,LITTLE/WINTER")
     
     # Write this out and save it
     write_csv(comm.diffs, paste(out.path, "SpeciesCommunityGARWeightedChanges.csv", sep= ""))
@@ -769,7 +780,7 @@ sdm_landings_merged<- function(sdm.path = sdm.path, landings.file, focal.comms =
   # End function
 }
 
-community_weighted_changes<- function(sdm.landings.file, projection.scenario = c("Raw", "Percent"), out.path = proc.summ.path, plot = TRUE){
+community_weighted_changes<- function(sdm.landings.file, projection.scenario = c("Raw", "Percent"), out.path = proc.summ.path, plot.path = fig.path, plot = "Community"){
   ## Details
   # This function calculates community level summaries of projected distribution changes weighted by value or volume importance and then plots them across the shelf
   
@@ -777,7 +788,7 @@ community_weighted_changes<- function(sdm.landings.file, projection.scenario = c
   # sdm.landings.file = Path to file created by sdm_landings_merged, which should have the necessary information. One of SpeciesFocalCommunityGearTypeCFDERSWeightedChanges.csv, SpeciesCommunityCFDERSWeightedChanges.csv, or SpeciesCommunityGARWeightedChanges.csv
   # projection.scenario = Character string indicating which projection scenario data to plot. If "raw" , then the function uses Future_mean_diff.combo.b, Future_warm_diff.combo.b, or Future_cold_diff.combo.b. If "percent" then function uses Future_mean_percdiff.combo.b, Future_warm_percdiff.combo.b, or Future_cold_percdiff.combo.b.
   # out.path = Path to save output, which will be community aggregated changes, and associated map
-  # plot = Logical TRUE/FALSE of if plot of community aggregated changes should be plotted
+  # plot = One of "Community" to plot each community's value OR "County" to plot county averages.
 
   # Returns: NULL; simply saves files in out.path
   
@@ -788,10 +799,10 @@ community_weighted_changes<- function(sdm.landings.file, projection.scenario = c
   # Set arguments for debugging -- this will NOT run when you call the function. Though, you can run each line inside the {} and then you will have everything you need to walk through the rest of the function.
   if(FALSE){
     sdm.landings.file<- "/Volumes/Shared/Research/COCA-conf/SDM and CFDERS Integration/Processed Summaries/SpeciesCommunityCFDERSWeightedChanges.csv"
-    projection.scenario<- "Raw"
+    projection.scenario<- "Percent"
     out.path<- "/Volumes/Shared/Research/COCA-conf/SDM and CFDERS Integration/Processed Summaries/"
-    plot.path<- "/Volumes/Shared/Research/COCA-conf/SDM and CFDERS Integration/Processed Summaries/"
-    plot<- TRUE
+    plot.path<- "/Volumes/Shared/Research/COCA-conf/SDM and CFDERS Integration/Figures and Tables/"
+    plot<- "Community"
   }
   
   # First, determine what file is being used for weights CFDERS "FocalComm.Spp.Gear" summary file or "Comm.Spp" summary file or GAR file
@@ -799,13 +810,13 @@ community_weighted_changes<- function(sdm.landings.file, projection.scenario = c
   
   # Next determine what projection scnearios
   scenarios.use<- switch(projection.scenario,
-                         "Raw" = c("Future_mean_diff.combo.b", "Future_warm_diff.combo.b", "Future_cold_diff.combo.b"),
-                         "Percent" = c("Future_mean_percdiff.combo.b", "Future_warm_percdiff.combo.b", "Future_cold_percdiff.combo.b"))
+                         "Raw" = c("Future_cold_diff.combo.b", "Future_mean_diff.combo.b", "Future_warm_diff.combo.b"),
+                         "Percent" = c("Future_cold_percdiff.combo.b", "Future_mean_percdiff.combo.b", "Future_warm_percdiff.combo.b"))
   
   # Factor levels for reordering
   scenarios.levels<- switch(projection.scenario,
-                            "Raw" = factor(scenarios.use, levels = c("Future_warm_diff.combo.b", "Future_mean_diff.combo.b", "Future_cold_diff.combo.b")),
-                            "Percent" = factor(scenarios.use, levels = c("Future_warm_percdiff.combo.b", "Future_mean_percdiff.combo.b", "Future_cold_percdiff.combo.b")))
+                            "Raw" = factor(scenarios.use, levels = c("Future_cold_diff.combo.b", "Future_mean_diff.combo.b", "Future_warm_diff.combo.b")),
+                            "Percent" = factor(scenarios.use, levels = c("Future_cold_percdiff.combo.b", "Future_mean_percdiff.combo.b", "Future_warm_percdiff.combo.b")))
   
   # Focal Communities-Gear Types
   if(file.use == "SpeciesFocalCommunityGearTypeCFDERSWeightedChanges.csv"){
@@ -819,7 +830,7 @@ community_weighted_changes<- function(sdm.landings.file, projection.scenario = c
                        "TotalChangeVolume" = sum(ChangeWeightedVolume, na.rm = TRUE))
     
     # Order factor levels
-    sdm.land.dat$ProjectionScenario<- factor(sdm.land.dat$ProjectionScenario, levels = scenarios.levels)
+    sdm.land.dat$ProjectionScenario<- factor(sdm.land.dat$ProjectionScenario, levels = scenarios.levels, labels = c("Cold climate scenario", "Average climate scenario", "Warm climate scenario"))
     
     # Save the file
     write_csv(sdm.land.dat, paste(out.path, "FocalCommunityGearAggregatedCFDERS", projection.scenario, "WeightedChanges.csv", sep = ""))
@@ -830,14 +841,22 @@ community_weighted_changes<- function(sdm.landings.file, projection.scenario = c
     # Read in sdm.landings data, filter to projection scenario, then summarize to get community-gear level changes, across species)
     sdm.land.dat<- read_csv(sdm.landings.file) %>%
       filter(., ProjectionScenario %in% scenarios.use) %>%
-      filter(., Footprint == "Regular") %>%
+      filter(., Footprint == "Regular") 
+    
+    # Dealing with infinit increases
+    if(projection.scenario == "Percent"){
+      sdm.land.dat$ChangeWeightedValue[is.infinite(sdm.land.dat$ChangeWeightedValue)]<-NA
+      sdm.land.dat$ChangeWeightedVolume[is.infinite(sdm.land.dat$ChangeWeightedVolume)]<-NA
+    }
+    
+    sdm.land.dat<- sdm.land.dat %>%
       group_by(Community, Long, Lat, ProjectionScenario) %>%
       summarize(., "TotalChangeValue" = sum(ChangeWeightedValue, na.rm = TRUE),
                 "TotalChangeVolume" = sum(ChangeWeightedVolume, na.rm = TRUE))
     
     # Order factor levels
-    sdm.land.dat$ProjectionScenario<- factor(sdm.land.dat$ProjectionScenario, levels = scenarios.levels)
-    
+    sdm.land.dat$ProjectionScenario<- factor(sdm.land.dat$ProjectionScenario, levels = scenarios.levels, labels = c("Warm climate scenario", "Warmer climate scenario", "Warmest climate scenario"))
+
     # Save the file
     write_csv(sdm.land.dat, paste(out.path, "CommunityAggregatedCFDERS", projection.scenario, "WeightedChanges.csv", sep = ""))
   }
@@ -863,14 +882,14 @@ community_weighted_changes<- function(sdm.landings.file, projection.scenario = c
                 "TotalChangeVolume" = sum(ChangeWeightedVolume, na.rm = TRUE))
     
     # Order factor levels
-    sdm.land.dat$ProjectionScenario<- factor(sdm.land.dat$ProjectionScenario, levels = scenarios.levels)
+    sdm.land.dat$ProjectionScenario<- factor(sdm.land.dat$ProjectionScenario, levels = scenarios.levels, labels = c("Cold climate scenario", "Average climate scenario", "Warm climate scenario"))
     
     # Save the file
     write_csv(sdm.land.dat, paste(out.path, "CommunityAggregatedGAR", projection.scenario, "WeightedChanges.csv", sep = ""))
   }
   
   # Now plotting
-  if(plot){
+  if(plot == "County"){
     # Spatial stuff -- gets us the states and shoreline
     # Spatial projections
     proj.wgs84<- CRS("+init=epsg:4326") #WGS84
@@ -949,6 +968,76 @@ community_weighted_changes<- function(sdm.landings.file, projection.scenario = c
     
     plot.out<- plot_grid(plot.out.value, plot.out.volume, nrow = 2, labels = c("Value", "Volume"))
     ggsave(paste(out.path, gsub(".csv", "", file.use), "CommunityAggregatedWeightedChanges.jpg", sep = ""), plot.out, width = 11, height = 8, units = "in")
+    
+  }
+  
+  if(plot == "Community"){
+    # Spatial stuff -- gets us the states and shoreline
+    state.data<- as_tibble(map_data("state")) %>% 
+      rename(state_group = group, state_order = order) %>% 
+      filter(region %in% c("maine", "new hampshire", "massachusetts", 
+                           "vermont", "rhode island", "connecticut", "new york", "new jersey",
+                           "pennsylvania", "delaware", "maryland", "district of columbia", "virginia",
+                           "north carolina", "south carolina", "georgia", "florida", "west virginia"))
+    
+    canada <- raster::getData("GADM",country="CAN",level=1)
+    provinces <- c("Ontario", "Québec", "Nova Scotia", "New Brunswick")
+    ca.provinces <- canada[canada$NAME_1 %in% provinces,]
+    ca.provinces <- gSimplify(ca.provinces, tol = 0.025, topologyPreserve = TRUE)
+    ca.provinces.f<- fortify(ca.provinces, NAME_1)
+    
+    sdm.land.plot<- sdm.land.dat %>%
+      group_by(Community, Long, Lat, ProjectionScenario) %>%
+      summarize(., 
+                "TotalChangeValue" = mean(TotalChangeValue, na.rm = TRUE), 
+                "TotalChangeVolume" = mean(TotalChangeVolume, na.rm = TRUE))
+    
+    # Alright, plot time
+    gmri.orange <- "#EA4F12"
+    gmri.light.gray <- "#E9E9E9"
+    gmri.blue <- "#00608A"
+    font.style <- "Arial Narrow"
+    font.size <- 8
+    
+    # # Focal communities
+    # focal.comm<- c("STONINGTON_ME", "PORTLAND_ME", "NEW BEDFORD_MA", "POINT JUDITH_RI")
+    # 
+    # # Subset to focal communities
+    # sdm.land.plot<- sdm.land.plot %>%
+    #   filter(., Community %in% focal.comm)
+    
+    plot.out.value<- ggplot() +
+      # Update "fill" and "color" to change map color
+      geom_polygon(data = state.data, aes(x=long, y=lat, group=state_group),
+                   alpha = .15, colour = "white") + 
+      geom_point(data = sdm.land.plot, aes(x = Long, y = Lat, fill = TotalChangeValue), pch = 21, size = 1.75, alpha = 0.5) +
+      # Here you'd make adjustments to the point colors...
+      scale_fill_gradient2(low = gmri.blue, mid = gmri.light.gray, high = gmri.orange, midpoint = 0) +
+      xlim(c(-75.75, -66.5)) + 
+      ylim(c(37, 47.5)) +
+      theme_map() + 
+      coord_fixed(1.3) +
+      theme(legend.position = "right", text = element_text(family = font.style, size = font.size)) +
+      facet_wrap(~ProjectionScenario) +
+      ggtitle(paste(projection.scenario, " Value Projected Values", sep = ""))
+    
+    plot.out.volume<- ggplot() +
+      # Update "fill" and "color" to change map color
+      geom_polygon(data = state.data, aes(x=long, y=lat, group=state_group),
+                   alpha = .15, colour = "white") + 
+      geom_point(data = sdm.land.plot, aes(x = Long, y = Lat, fill = TotalChangeVolume), pch = 21, size = 1.75, alpha = 0.5) +
+      # Here you'd make adjustments to the point colors...
+      scale_fill_gradient2(low = gmri.blue, mid = gmri.light.gray, high = gmri.orange, midpoint = 0) +
+      xlim(c(-75.75, -66.5)) + 
+      ylim(c(37, 47.5)) +
+      theme_map() + 
+      coord_fixed(1.3) +
+      theme(legend.position = "right", text = element_text(family = font.style, size = font.size)) +
+      facet_wrap(~ProjectionScenario) +
+      ggtitle(paste(projection.scenario, " Volume Projected Values", sep = ""))
+    
+    plot.out<- plot_grid(plot.out.value, plot.out.volume, nrow = 2)
+    ggsave(paste(plot.path, gsub(".csv", "", file.use), "CommunityAggregated", projection.scenario, "WeightedChanges.jpg", sep = ""), plot.out, width = 11, height = 8, units = "in")
     
   }
   
@@ -1061,3 +1150,67 @@ community_successfulmodels<- function(sdm.landings.file, mod.criteria = "AUC", m
 
   # End function
 }
+
+landings_top_spp_func<- function(df, rank.var, top.n, spp.type){
+  ## Details
+  # This function reads in a fisheries landings dataset and calculates the top species for a given port
+  
+  # Args:
+  # input.data = Input dataset
+  # top.n = Integer for number of top species to return
+  # rank.var = Character indicating which variable (column) to use in deciding top species.
+  # spp.type = Character string, either spp or spp.alt, where spp.alt contains aggregated species groupings for species managed collectively (e.g., multispecies groundfish)
+  
+  # Returns: NA
+  
+  ## Start function
+  # Install libraries
+  library_check(c("raster", "tidyverse"))
+  
+  # Set arguments for debugging -- this will NOT run when you call the function. Though, you can run each line inside the {} and then you will have everything you need to walk through the rest of the function.
+  if(FALSE){
+    landings.file<- "/Volumes/Shared/Research/COCA-conf/SDM and CFDERS Integration/Processed Summaries/Comm.Sppsummary.csv"
+    rank.var<- "Meansppvalue"
+    top.n<- 10
+    spp.type<- "spp"
+  }
+
+  # First, determine what file is being used for landings CFDERS "FocalComm.Spp.Gear" summary file or "Comm.Spp" summary file or GAR summary file
+  file.use<- basename(landings.file)
+  
+  # Alternative species groupings
+  cfders.nemulti<- c("FLOUNDER, AM. PLAICE", "COD", "HALIBUT, ATLANTIC", "POLLOCK", "WOLFFISH,ATLANTIC", "HADDOCK", "POUT, OCEAN", "REDFISH", "HAKE, WHITE", "FLOUNDER, SAND-DAB", "FLOUNDER, WINTER", "FLOUNDER, WITCH", "FLOUNDER, YELLOWTAIL") 
+  
+  if(file.use == "Comm.Sppsummary.csv"){
+    # Read in landings data, create new spp.alt column for alternative species groupings
+    dat<- read_csv(landings.file) %>%
+      mutate(., spp.alt = case_when(spp_common_name %in% cfders.nemulti ~ "N.E. Multispecies",
+                                    !spp_common_name %in% cfders.nemulti ~ as.character(spp_common_name)))
+    
+    # Now, figure out the top species by community using rank.var and top.n
+    if(spp.type == "spp.alt"){
+      top.species<- dat %>% 
+        dplyr::group_by(jgs, spp.alt) %>% 
+        dplyr::summarize(mean.value = sum(Meansppvalue, na.rm = TRUE)) %>% 
+        arrange(jgs, desc(mean.value)) %>% 
+        group_by(jgs) %>% 
+        top_n(top.n, mean.value) %>%  
+        arrange(desc(mean.value))
+    } else {
+      top.species<- dat %>% 
+        group_by(jgs, spp_common_name) %>% 
+        dplyr::summarize(mean.value = sum(Meansppvalue, na.rm = TRUE)) %>% 
+        arrange(jgs, desc(mean.value)) %>% 
+        group_by(jgs) %>% 
+        top_n(top.n, mean.value) %>%  
+        arrange(desc(mean.value))
+    }
+    
+    # Return top species data set
+    return(top.species)
+  }
+  
+  # End function
+}
+
+
